@@ -1,8 +1,5 @@
-import { loadCloudSettings, saveCloudSettings } from "./firebase.js";
-
 const API_BASE = "https://alerta.ina.gob.ar/pub/datos";
 const STATION = { siteCode: 52, seriesId: 52, varId: 2, name: "San Fernando" };
-const settingsKey = "rio-en-alerta-settings";
 
 const elements = {
   connectionStatus: document.querySelector("#connection-status"),
@@ -15,10 +12,6 @@ const elements = {
   trendLabel: document.querySelector("#trend-label"),
   trendDescription: document.querySelector("#trend-description"),
   forecastGrid: document.querySelector("#forecast-grid"),
-  alertThreshold: document.querySelector("#custom-threshold"),
-  notificationsEnabled: document.querySelector("#notifications-enabled"),
-  alertForm: document.querySelector("#alert-form"),
-  formMessage: document.querySelector("#form-message"),
   historyRange: document.querySelector("#history-range"), historyChart: document.querySelector("#history-chart"), historyList: document.querySelector("#history-list"), historySummary: document.querySelector("#history-summary"),
 };
 
@@ -122,26 +115,6 @@ function renderForecast(forecast) {
   }).join("");
 }
 
-async function loadSettings() {
-  const saved = JSON.parse(localStorage.getItem(settingsKey) || "{}");
-  elements.alertThreshold.value = saved.threshold ?? "2.50";
-  elements.notificationsEnabled.checked = Boolean(saved.notifications);
-  try {
-    const cloud = await loadCloudSettings();
-    if (cloud?.threshold != null) elements.alertThreshold.value = cloud.threshold;
-  } catch { /* La app sigue funcionando sin conexión o si Firebase aún no responde. */ }
-}
-
-function checkAlert() {
-  const threshold = Number(elements.alertThreshold.value);
-  const peak = Math.max(latest.current?.value ?? -Infinity, ...latest.forecast.map((item) => item.value));
-  if (!elements.notificationsEnabled.checked || !Number.isFinite(threshold) || peak < threshold || Notification.permission !== "granted") return;
-  const lastNotice = Number(localStorage.getItem("rio-en-alerta-last-notice"));
-  if (Date.now() - lastNotice < 6 * 60 * 60 * 1000) return;
-  new Notification("Río en Alerta", { body: `El nivel actual o previsto alcanza ${formatLevel(peak)} m (tu alerta: ${formatLevel(threshold)} m).` });
-  localStorage.setItem("rio-en-alerta-last-notice", String(Date.now()));
-}
-
 async function refresh() {
   elements.refreshButton.disabled = true;
   elements.refreshButton.textContent = "Actualizando…";
@@ -160,7 +133,6 @@ async function refresh() {
     renderForecast(normalizeForecast(forecastPayload));
     elements.connectionStatus.className = "live-status is-live";
     elements.connectionStatus.lastElementChild.textContent = "Datos actualizados";
-    checkAlert();
     loadHistory();
   } catch (error) {
     elements.connectionStatus.className = "live-status has-error";
@@ -181,23 +153,4 @@ async function loadHistory() {
 
 elements.refreshButton.addEventListener("click", refresh);
 elements.historyRange.addEventListener("change", loadHistory);
-elements.alertForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const threshold = Number(elements.alertThreshold.value);
-  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 6) {
-    elements.formMessage.textContent = "Ingresá una altura entre 0 y 6 metros.";
-    return;
-  }
-  if (elements.notificationsEnabled.checked && "Notification" in window && Notification.permission !== "granted") {
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") elements.notificationsEnabled.checked = false;
-  }
-  const settings = { threshold, notifications: elements.notificationsEnabled.checked };
-  localStorage.setItem(settingsKey, JSON.stringify(settings));
-  try { await saveCloudSettings(settings); } catch { elements.formMessage.textContent = "Umbral guardado localmente. La sincronización se reintentará al guardar de nuevo."; return; }
-  elements.formMessage.textContent = elements.notificationsEnabled.checked ? "Alerta guardada. Te avisaremos si se alcanza el umbral." : "Umbral guardado. Activá las notificaciones cuando quieras.";
-  checkAlert();
-});
-
-loadSettings();
 refresh();
