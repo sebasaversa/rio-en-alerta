@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#083b4c" />
+    <title>Río en Alerta | San Fernando</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#inicio" aria-label="Río en Alerta, inicio">
+          <span class="brand-mark" aria-hidden="true">≈</span>
+          <span>Río en <strong>Alerta</strong></span>
+        </a>
+        <div class="live-status" id="connection-status" role="status">
+          <span class="status-dot"></span>
+          <span>Actualizando datos</span>
+        </div>
+      </header>
+
+      <section class="hero" id="inicio" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">Río Luján · San Fernando</p>
+          <h1 id="page-title">El río, claro y a tiempo.</h1>
+          <p class="hero-copy">Consultá el nivel observado y anticipá los próximos días antes de que el agua te sorprenda.</p>
+        </div>
+        <button class="outline-button" id="refresh-button" type="button">↻ Actualizar ahora</button>
+      </section>
+
+      <section class="dashboard" aria-label="Estado del río">
+        <article class="level-card card">
+          <div class="card-label-row">
+            <p class="card-label">Nivel actual</p>
+            <span class="pill" id="level-state">Normal</span>
+          </div>
+          <div class="level-reading">
+            <strong id="current-level">—</strong><span>m</span>
+          </div>
+          <p class="reading-meta" id="observed-at">Cargando última medición…</p>
+          <div class="river-meter" aria-hidden="true"><span id="meter-fill"></span></div>
+          <p class="meter-caption">Alerta a <strong id="alert-threshold-label">3,00 m</strong> · Evacuación a <strong id="evacuation-threshold-label">3,50 m</strong></p>
+        </article>
+
+        <article class="trend-card card">
+          <p class="card-label">Tendencia observada</p>
+          <div class="trend" id="trend-indicator">
+            <span class="trend-icon" aria-hidden="true">↗</span>
+            <strong id="trend-label">Analizando</strong>
+          </div>
+          <p id="trend-description">Comparando las últimas lecturas disponibles.</p>
+          <div class="source-note">Fuente: INA · SIyAH</div>
+        </article>
+      </section>
+
+      <section class="forecast-section" aria-labelledby="forecast-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Planificá con margen</p>
+            <h2 id="forecast-title">Próximos días</h2>
+          </div>
+          <p>Estimación del nivel previsto para San Fernando.</p>
+        </div>
+        <div class="forecast-grid" id="forecast-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="alerts-panel" aria-labelledby="alerts-title">
+        <div>
+          <p class="eyebrow">Tu margen de tranquilidad</p>
+          <h2 id="alerts-title">Alertas a tu medida</h2>
+          <p class="alerts-copy">Recibí una notificación cuando el nivel observado o previsto alcance el valor que te importa.</p>
+        </div>
+        <form class="alert-form" id="alert-form">
+          <label for="custom-threshold">Avisarme a partir de</label>
+          <div class="threshold-control">
+            <input id="custom-threshold" name="threshold" type="number" min="0" max="6" step="0.05" value="2.50" inputmode="decimal" />
+            <span>m</span>
+          </div>
+          <label class="switch-row" for="notifications-enabled">
+            <input id="notifications-enabled" type="checkbox" />
+            <span class="switch" aria-hidden="true"></span>
+            <span>Activar notificaciones</span>
+          </label>
+          <button class="primary-button" type="submit">Guardar alerta</button>
+          <p class="form-message" id="form-message" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <footer>
+        <p>Datos hidrométricos del <a href="https://alerta.ina.gob.ar/pub/gui/apibase" target="_blank" rel="noreferrer">Sistema de Información Hidrológica del INA</a>. Los valores son informativos; ante una emergencia, seguí a las autoridades locales.</p>
+      </footer>
+    </main>
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>
