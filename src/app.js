@@ -19,6 +19,7 @@ const elements = {
   notificationsEnabled: document.querySelector("#notifications-enabled"),
   alertForm: document.querySelector("#alert-form"),
   formMessage: document.querySelector("#form-message"),
+  historyRange: document.querySelector("#history-range"), historyChart: document.querySelector("#history-chart"), historyList: document.querySelector("#history-list"), historySummary: document.querySelector("#history-summary"),
 };
 
 let thresholds = { alert: 3, evacuation: 3.5 };
@@ -160,6 +161,7 @@ async function refresh() {
     elements.connectionStatus.className = "live-status is-live";
     elements.connectionStatus.lastElementChild.textContent = "Datos actualizados";
     checkAlert();
+    loadHistory();
   } catch (error) {
     elements.connectionStatus.className = "live-status has-error";
     elements.connectionStatus.lastElementChild.textContent = "No se pudo actualizar";
@@ -172,7 +174,13 @@ async function refresh() {
   }
 }
 
+async function loadHistory() {
+  const days = Number(elements.historyRange.value); const end = new Date(); const start = new Date(end); start.setDate(start.getDate() - days);
+  try { const rows = normalizeObservations(await getJson("datos", {timeStart:start.toISOString().slice(0,10),timeEnd:end.toISOString().slice(0,10),siteCode:52,varId:2,format:"json"})); const shown = days === 1 ? rows : rows.filter((_,i)=>i===0 || i===rows.length-1 || i % Math.max(1,Math.floor(rows.length/12))===0); const vals=shown.map(x=>x.value), min=Math.min(...vals), max=Math.max(...vals), span=max-min||1; const points=shown.map((x,i)=>`${i/(shown.length-1||1)*680+10},${175-(x.value-min)/span*145}`).join(" "); elements.historyChart.innerHTML=`<line x1="10" y1="175" x2="690" y2="175"/><polyline points="${points}"/>`; elements.historySummary.textContent=`${shown.length} mediciones · mínimo ${formatLevel(min)} m · máximo ${formatLevel(max)} m`; elements.historyList.innerHTML=shown.slice(-4).reverse().map(x=>`<div class="history-item">${formatDate(x.date)}<strong>${formatLevel(x.value)} m</strong></div>`).join(""); } catch { elements.historySummary.textContent="No se pudo cargar el historial."; }
+}
+
 elements.refreshButton.addEventListener("click", refresh);
+elements.historyRange.addEventListener("change", loadHistory);
 elements.alertForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const threshold = Number(elements.alertThreshold.value);
