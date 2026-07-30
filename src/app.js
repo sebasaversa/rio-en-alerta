@@ -1,3 +1,5 @@
+import { loadCloudSettings, saveCloudSettings } from "./firebase.js";
+
 const API_BASE = "https://alerta.ina.gob.ar/pub/datos";
 const STATION = { siteCode: 52, seriesId: 52, varId: 2, name: "San Fernando" };
 const settingsKey = "rio-en-alerta-settings";
@@ -119,10 +121,14 @@ function renderForecast(forecast) {
   }).join("");
 }
 
-function loadSettings() {
+async function loadSettings() {
   const saved = JSON.parse(localStorage.getItem(settingsKey) || "{}");
   elements.alertThreshold.value = saved.threshold ?? "2.50";
   elements.notificationsEnabled.checked = Boolean(saved.notifications);
+  try {
+    const cloud = await loadCloudSettings();
+    if (cloud?.threshold != null) elements.alertThreshold.value = cloud.threshold;
+  } catch { /* La app sigue funcionando sin conexión o si Firebase aún no responde. */ }
 }
 
 function checkAlert() {
@@ -178,7 +184,9 @@ elements.alertForm.addEventListener("submit", async (event) => {
     const permission = await Notification.requestPermission();
     if (permission !== "granted") elements.notificationsEnabled.checked = false;
   }
-  localStorage.setItem(settingsKey, JSON.stringify({ threshold, notifications: elements.notificationsEnabled.checked }));
+  const settings = { threshold, notifications: elements.notificationsEnabled.checked };
+  localStorage.setItem(settingsKey, JSON.stringify(settings));
+  try { await saveCloudSettings(settings); } catch { elements.formMessage.textContent = "Umbral guardado localmente. La sincronización se reintentará al guardar de nuevo."; return; }
   elements.formMessage.textContent = elements.notificationsEnabled.checked ? "Alerta guardada. Te avisaremos si se alcanza el umbral." : "Umbral guardado. Activá las notificaciones cuando quieras.";
   checkAlert();
 });
