@@ -1,0 +1,38 @@
+.admin-shell { max-width: 1180px; margin: 0 auto; padding: 0 28px 60px; }
+.admin-topbar { min-height: 84px; display: flex; align-items: center; justify-content: space-between; }
+.admin-intro { padding: 56px 0 36px; }
+.admin-intro h1 { margin-bottom: 16px; font-size: clamp(2.8rem, 6vw, 5rem); }
+.admin-intro > p:last-child { max-width: 650px; color: var(--muted); line-height: 1.6; }
+.login-card { max-width: 560px; padding: 30px; }
+.login-card h2 { margin-bottom: 14px; }
+.login-card p { color: var(--muted); line-height: 1.5; }
+.is-hidden { display: none !important; }
+.admin-status { display: grid; grid-template-columns: 1fr 2fr auto; align-items: center; gap: 24px; padding: 24px 28px; }
+.admin-status strong { font-size: 1.25rem; }
+.admin-status strong.is-ok { color: #17694d; }
+.admin-status strong.is-error { color: var(--danger); }
+.admin-status p { margin: 0; color: var(--muted); }
+.metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 18px 0; }
+.metric { padding: 22px; }
+.metric span { display: block; min-height: 2.5em; color: var(--muted); font-size: .82rem; }
+.metric strong { display: block; margin-top: 10px; font-family: Georgia, "Times New Roman", serif; font-size: 2.6rem; font-weight: 500; }
+.users-card { padding: 28px; }
+.users-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.users-heading label { color: var(--muted); font-size: .82rem; }
+.users-heading input { display: block; width: 250px; margin-top: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: white; color: var(--ink); }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 14px 12px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { color: var(--muted); font-size: .74rem; letter-spacing: .05em; text-transform: uppercase; }
+td { font-size: .88rem; }
+td small { display: block; margin-top: 3px; color: var(--muted); }
+.admin-pill { display: inline-block; padding: 5px 9px; border-radius: 20px; background: #eee8df; color: var(--muted); font-size: .75rem; font-weight: 750; }
+.admin-pill.is-active { background: #daf1e9; color: #17694d; }
+.admin-message { min-height: 1.4em; margin: 18px 0 0; color: var(--muted); font-size: .84rem; }
+@media (max-width: 760px) {
+  .admin-shell { padding: 0 18px 40px; }
+  .admin-status { grid-template-columns: 1fr; }
+  .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .users-heading { align-items: start; flex-direction: column; }
+  .users-heading input { width: min(100%, 320px); }
+}

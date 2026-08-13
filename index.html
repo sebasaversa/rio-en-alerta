@@ -29,11 +29,6 @@
         <button class="outline-button" id="refresh-button" type="button">↻ Actualizar ahora</button>
       </section>
 
-      <section class="history-section" aria-labelledby="history-title">
-        <div class="section-heading"><div><p class="eyebrow">Datos observados</p><h2 id="history-title">Historial del río</h2></div><label>Ver <select id="history-range"><option value="1">por hora · 24 h</option><option value="7">por día · 7 días</option><option value="30">por día · 30 días</option></select></label></div>
-        <div class="history-card"><p id="history-summary">Cargando historial…</p><svg id="history-chart" viewBox="0 0 700 190" role="img" aria-label="Gráfico de altura histórica"></svg><div id="history-list" class="history-list"></div></div>
-      </section>
-
       <section class="dashboard" aria-label="Estado del río">
         <article class="level-card card">
           <div class="card-label-row">
@@ -59,6 +54,11 @@
         </article>
       </section>
 
+      <section class="history-section" aria-labelledby="history-title">
+        <div class="section-heading"><div><p class="eyebrow">Datos observados</p><h2 id="history-title">Historial del río</h2></div><label>Ver <select id="history-range"><option value="1">por hora · 24 h</option><option value="7">por día · 7 días</option><option value="30">por día · 30 días</option></select></label></div>
+        <div class="history-card"><p id="history-summary">Cargando historial…</p><svg id="history-chart" viewBox="0 0 700 190" role="img" aria-label="Gráfico de altura histórica"></svg><div id="history-list" class="history-list"></div></div>
+      </section>
+
       <section class="forecast-section" aria-labelledby="forecast-title">
         <div class="section-heading">
           <div>
@@ -72,6 +72,7 @@
 
       <footer>
         <p>Datos hidrométricos del <a href="https://alerta.ina.gob.ar/pub/gui/apibase" target="_blank" rel="noreferrer">Sistema de Información Hidrológica del INA</a>. Los valores son informativos; ante una emergencia, seguí a las autoridades locales.</p>
+        <p class="admin-link"><a href="admin.html">Administración</a></p>
       </footer>
     </main>
     <script type="module" src="src/app.js"></script>

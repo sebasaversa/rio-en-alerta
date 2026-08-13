@@ -22,9 +22,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - name: Verify Firebase Functions
+        working-directory: functions
+        run: |
+          npm ci
+          npm test
+          npm run check
+      - name: Prepare public artifact
+        run: |
+          mkdir -p dist/src
+          cp index.html admin.html dist/
+          cp src/app.js src/styles.css src/admin.js src/admin.css src/firebase.js dist/src/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: dist
       - id: deployment
         uses: actions/deploy-pages@v4

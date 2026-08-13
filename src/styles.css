@@ -18,7 +18,6 @@ body { margin: 0; background: var(--sand); color: var(--ink); font-family: Inter
 button, input { font: inherit; }
 button { cursor: pointer; }
 .app-shell { max-width: 1160px; margin: 0 auto; padding: 0 28px; display: flex; flex-direction: column; }
-.dashboard { order: 1; } .history-section { order: 2; } .forecast-section { order: 3; } .alerts-panel { order: 4; } footer { order: 5; }
 .topbar { min-height: 84px; display: flex; align-items: center; justify-content: space-between; }
 .brand { color: var(--deep); text-decoration: none; font-size: 1.1rem; letter-spacing: -.02em; }
 .brand strong { color: var(--ocean); }
@@ -73,22 +72,9 @@ h2 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .forecast-state { display: inline-block; margin-top: 16px; color: #27745d; font-size: .76rem; font-weight: 750; }
 .forecast-state.is-warning { color: var(--warning); }
 .forecast-state.is-danger { color: var(--danger); }
-.alerts-panel { display: grid; grid-template-columns: 1.1fr 1fr; gap: 55px; padding: 44px 48px; border-radius: 24px; background: #d9ede9; }
-.alerts-copy { max-width: 430px; margin: 17px 0 0; color: #42636a; line-height: 1.55; }
-.alert-form { display: grid; grid-template-columns: 1fr auto; align-content: start; gap: 12px; }
-.alert-form > label:first-child { grid-column: 1 / -1; color: var(--deep); font-size: .88rem; font-weight: 700; }
-.threshold-control { display: flex; align-items: center; border: 1px solid #9ec2c0; border-radius: 12px; background: #fff; overflow: hidden; }
-.threshold-control input { width: 100%; padding: 12px 14px; border: 0; outline: 0; background: transparent; }
-.threshold-control span { padding: 12px 14px; border-left: 1px solid #d7e5e2; color: var(--muted); }
-.switch-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin: 7px 0; color: #31545c; font-size: .9rem; cursor: pointer; }
-.switch-row input { position: absolute; opacity: 0; }
-.switch { width: 36px; height: 21px; padding: 3px; border-radius: 20px; background: #91aaa9; transition: background .2s; }
-.switch::after { display: block; width: 15px; height: 15px; border-radius: 50%; background: white; content: ""; transition: transform .2s; }
-.switch-row input:checked + .switch { background: var(--ocean); }
-.switch-row input:checked + .switch::after { transform: translateX(15px); }
 .form-message { grid-column: 1 / -1; min-height: 1.2em; margin: 0; color: #31545c; font-size: .84rem; }
 footer { padding: 34px 0 45px; color: var(--muted); font-size: .77rem; line-height: 1.5; }
-footer p { margin: 0; } footer a { color: var(--ocean); }
-@media (max-width: 720px) { .app-shell { padding: 0 18px; } .topbar { min-height: 68px; } .hero { align-items: start; flex-direction: column; padding: 48px 0 40px; } .dashboard, .alerts-panel { grid-template-columns: 1fr; } .forecast-grid { grid-template-columns: repeat(2, 1fr); } .forecast-day:last-child { grid-column: span 2; } .section-heading { align-items: start; flex-direction: column; gap: 14px; } .alerts-panel { gap: 30px; padding: 32px 25px; } .level-card, .trend-card { padding: 24px; } }
+footer p { margin: 0; } footer a { color: var(--ocean); } footer .admin-link { margin-top: 10px; font-size: .7rem; }
+@media (max-width: 720px) { .app-shell { padding: 0 18px; } .topbar { min-height: 68px; } .hero { align-items: start; flex-direction: column; padding: 48px 0 40px; } .dashboard { grid-template-columns: 1fr; } .forecast-grid { grid-template-columns: repeat(2, 1fr); } .forecast-day:last-child { grid-column: span 2; } .section-heading { align-items: start; flex-direction: column; gap: 14px; } .level-card, .trend-card { padding: 24px; } }
 @media (max-width: 720px) { .history-card{padding:18px}.history-list{grid-template-columns:repeat(2,1fr);gap:12px}.history-item{min-height:76px;padding:12px;font-size:.8rem;line-height:1.3}.history-item strong{margin-top:6px;font-size:1.35rem;white-space:nowrap} }
 @media (max-width: 390px) { .live-status { font-size: .7rem; } .brand { font-size: .95rem; } .forecast-grid { grid-template-columns: 1fr; } .forecast-day:last-child { grid-column: auto; } }

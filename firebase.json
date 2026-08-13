@@ -1,1 +1,17 @@
-{ "firestore": { "rules": "firestore.rules" }, "functions": { "source": "functions" } }
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "functions": {
+    "source": "functions"
+  },
+  "auth": {
+    "providers": {
+      "anonymous": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Río en Alerta",
+        "supportEmail": "sebastianaversa@gmail.com"
+      }
+    }
+  }
+}

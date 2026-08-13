@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#083b4c" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Administración | Río en Alerta</title>
+    <link rel="stylesheet" href="src/styles.css" />
+    <link rel="stylesheet" href="src/admin.css" />
+  </head>
+  <body>
+    <main class="admin-shell">
+      <header class="admin-topbar">
+        <a class="brand" href="./" aria-label="Volver a Río en Alerta">
+          <span class="brand-mark" aria-hidden="true">≈</span>
+          <span>Río en <strong>Alerta</strong></span>
+        </a>
+        <button class="outline-button is-hidden" id="sign-out" type="button">Cerrar sesión</button>
+      </header>
+
+      <section class="admin-intro">
+        <p class="eyebrow">Acceso privado</p>
+        <h1>Actividad del bot</h1>
+        <p>Usuarios que interactuaron con Telegram, estado de suscripción y última actividad registrada.</p>
+      </section>
+
+      <section class="login-card card" id="login-panel">
+        <h2>Ingresar</h2>
+        <p>Usá la cuenta de Google autorizada para administrar Río en Alerta.</p>
+        <button class="primary-button" id="sign-in" type="button">Ingresar con Google</button>
+        <p class="admin-message" id="login-message" role="status"></p>
+      </section>
+
+      <section class="is-hidden" id="dashboard" aria-live="polite">
+        <div class="admin-status card">
+          <div>
+            <p class="card-label">Revisión horaria</p>
+            <strong id="scheduler-status">Sin datos</strong>
+          </div>
+          <p id="scheduler-detail">Esperando la primera ejecución registrada.</p>
+          <button class="outline-button" id="reload" type="button">↻ Actualizar</button>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric card"><span>Total registrados</span><strong id="metric-total">—</strong></article>
+          <article class="metric card"><span>Alertas activas</span><strong id="metric-subscribed">—</strong></article>
+          <article class="metric card"><span>Activos últimos 30 días</span><strong id="metric-active">—</strong></article>
+          <article class="metric card"><span>Alertas enviadas</span><strong id="metric-alerts">—</strong></article>
+        </div>
+
+        <section class="users-card card">
+          <div class="users-heading">
+            <div><p class="eyebrow">Telegram</p><h2>Usuarios registrados</h2></div>
+            <label>Buscar <input id="user-search" type="search" placeholder="Nombre o usuario" /></label>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Usuario</th><th>Alta</th><th>Última actividad</th><th>Máximo</th><th>Estado</th></tr></thead>
+              <tbody id="users-body"></tbody>
+            </table>
+          </div>
+          <p class="admin-message" id="users-message" role="status"></p>
+        </section>
+      </section>
+    </main>
+    <script type="module" src="src/admin.js"></script>
+  </body>
+</html>
