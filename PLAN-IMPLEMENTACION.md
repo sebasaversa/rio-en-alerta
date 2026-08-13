@@ -57,19 +57,18 @@ Estado de referencia: 13 de agosto de 2026.
 - `[x]` Bot Telegram creado, secreto `TELEGRAM_BOT_TOKEN` guardado y webhook
   configurado.
 - `[x]` Funcion programada `checkRiver` desplegada para revisar cada hora.
-- `[~]` Consolidar y verificar en produccion la version final de
-  `telegramWebhook`, ya implementada y cubierta por pruebas locales.
-- `[~]` Registrar `lastActiveAt` en cada interaccion; implementado localmente y
-  pendiente de despliegue y verificacion real.
-- `[~]` Botones de Telegram y comandos de pronostico/historial implementados;
-  pendientes de despliegue y prueba real.
-- `[~]` Vista privada de administracion implementada con Firebase
-  Authentication; falta autorizar la cuenta administradora y publicar.
-- `[~]` Visualizacion de `lastActiveAt` implementada en la vista administrativa.
-- `[~]` Workflow preparado para publicar solo el artefacto web permitido;
-  pendiente de verificacion en GitHub Actions.
-- `[ ]` Evaluar Firebase Hosting solo despues de completar la estabilizacion y
-  contar con una necesidad concreta de rutas privadas o dominio propio.
+- `[x]` `telegramWebhook` consolidada, desplegada y verificada con comandos
+  reales contra el chat administrador.
+- `[x]` `lastActiveAt` desplegado y verificado en los logs estructurados de cada
+  comando procesado.
+- `[x]` Botones, menu y comandos de pronostico/historial desplegados y
+  verificados.
+- `[~]` Vista privada publicada, Google Sign-In habilitado y cuenta propietaria
+  autorizada; resta la primera validacion interactiva del propietario.
+- `[x]` Visualizacion de `lastActiveAt` publicada en la vista administrativa.
+- `[x]` Workflow publica solo el artefacto web permitido y termino en `success`.
+- `[x]` Firebase Hosting evaluado: se mantiene GitHub Pages hasta contar con una
+  necesidad concreta de rutas privadas o dominio propio.
 
 ## Estrategia de hosting y migracion
 
@@ -378,8 +377,8 @@ INA API
    envio y manejar errores 429 de Telegram con backoff.
 7. **Acceso administrativo.** La consulta de usuarios debe requerir una
    identidad Firebase autorizada y nunca quedar abierta por una URL publica.
-8. **Retencion.** Definir una politica para eliminar chats inactivos, por
-   ejemplo despues de 12 meses, con aviso previo y posibilidad de reactivar.
+8. **Retencion.** Eliminar chats y eventos de alertas sin actividad o con una
+   antiguedad mayor a 12 meses; una nueva interaccion vuelve a registrar el chat.
 
 ### Decisiones aprobadas el 13 de agosto de 2026
 
@@ -489,15 +488,15 @@ real.
 - `[x]` Panel de usuarios definido como pantalla Firebase protegida.
 - `[ ]` Definir estaciones adicionales para comparar.
 - `[x]` El pronostico no dispara alertas; solo lo hace la medicion observada.
-- `[~]` Botones y `setMyCommands` implementados; falta verificacion desplegada.
+- `[x]` Botones y `setMyCommands` desplegados y verificados con `/start`.
 
 ## Puesta en marcha del panel administrativo
 
-El panel se publica en `admin.html`, pero Firestore solo entrega datos a UIDs
+El panel esta publicado en `admin.html`, pero Firestore solo entrega datos a UIDs
 presentes en `adminUsers/{uid}` con `active: true`. El primer acceso se realiza
-con Google. Si la cuenta aun no esta autorizada, la pantalla muestra su UID.
-El alta administrativa se hace una sola vez desde un entorno confiable; nunca
-desde el navegador ni mediante reglas de autoasignacion.
+con Google. La cuenta propietaria `sebastianaversa@gmail.com` ya fue vinculada y
+autorizada. Las altas administrativas se hacen desde un entorno confiable;
+nunca desde el navegador ni mediante reglas de autoasignacion.
 
 ## Historial de entregas
 
@@ -507,6 +506,9 @@ desde el navegador ni mediante reglas de autoasignacion.
 - `d35ac7b`: mejora de lectura del historial.
 - `65f8993`: seccion de alertas web ocultada.
 - `fbfd3c1`: seccion de alertas web eliminada definitivamente.
+- `a487f5c`: bot estabilizado, actividad, retencion, panel privado y publicacion
+  segura de Pages.
+- `v1.1.0`: entrega verificada de Telegram y administracion privada.
 
 Este archivo debe actualizarse cada vez que cambien los comandos, los campos de
 Firestore, la fuente de datos, la frecuencia de consulta, las reglas o el
