@@ -15,14 +15,22 @@ suscriptores.
 - El cliente Telegram reintenta errores `429`, `5xx` y fallos de red con
   `retry_after`, backoff exponencial y un presupuesto de espera acotado.
 - El bot ofrece altura actual, máximo personal, pronóstico diario con
-  mínima/máxima, historial de `24h`, `7d` o `30d` y resumen diario opcional.
-- La web compara mediciones observadas de Tigre, Dique Luján y San Isidro sin
-  utilizarlas para el pronóstico de San Fernando.
+  mínima/máxima, historial de `24h`, `7d` o `30d`, resumen diario opcional y
+  preferencias individuales mediante `/avisos`.
+- Los avisos automáticos distinguen altura máxima, crecida rápida, bajante
+  rápida y recuperación. Los tres tipos nuevos son opt-in para usuarios
+  existentes; la alerta por altura conserva su configuración actual.
+- La web compara en un mismo gráfico las mediciones observadas de San Fernando,
+  Tigre, Dique Luján y San Isidro, sin utilizar las estaciones comparativas
+  para el pronóstico de San Fernando.
 - El indicador de subida o bajada rápida usa percentiles direccionales del
   historial de San Fernando y se identifica expresamente como una estimación
-  estadística propia, separada de los niveles oficiales.
+  estadística propia, separada de los niveles oficiales. La tarjeta de tendencia
+  muestra tanto la velocidad actual como las velocidades estadísticas de alerta
+  para ascensos y descensos.
 - Firestore guarda suscripciones, actividad, estado operativo y alertas
-  enviadas.
+  enviadas. Una máquina de estados procesa cada medición del INA una sola vez,
+  evita repetir una condición y aplica 10 cm de histéresis a la recuperación.
 - Firebase Authentication protege el panel administrativo.
 
 ## Desarrollo y validación
@@ -60,7 +68,10 @@ La documentación funcional y operativa completa está en
 
 La app consulta la API pública del Sistema de Información Hidrológica del INA
 (SIyAH), usando `siteCode=52`, `varId=2` y el pronóstico calibrado de San
-Fernando. El historial puede descargarse como CSV para `24h`, `7d` o `30d` y
-conserva todas las mediciones recibidas en el rango, aunque el gráfico reduzca
-la cantidad de puntos visibles. Los valores son informativos y no sustituyen
-avisos oficiales.
+Fernando. El historial web permite consultar `24h`, `7d`, `30d`, `3 meses`,
+`6 meses` o `12 meses`. Para 24 horas se grafican las mediciones individuales;
+para rangos más largos se muestran promedios diarios de las cuatro estaciones,
+calculados en la zona horaria de Argentina. El CSV conserva todas las
+mediciones originales de San Fernando del rango seleccionado. Las estaciones
+comparativas nunca alimentan el pronóstico. Los valores son informativos y no
+sustituyen avisos oficiales.

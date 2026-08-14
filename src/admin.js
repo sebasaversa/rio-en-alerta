@@ -65,6 +65,25 @@ function userName(user) {
   return fullName || (user.username ? `@${user.username}` : "Sin nombre");
 }
 
+function formatAlertPreferences(value = {}) {
+  const preferences = {
+    height: typeof value.height === "boolean" ? value.height : true,
+    rapidRise: Boolean(value.rapidRise),
+    rapidFall: Boolean(value.rapidFall),
+    recovery: Boolean(value.recovery),
+  };
+  const labels = {
+    height: "Altura",
+    rapidRise: "Crecida",
+    rapidFall: "Bajante",
+    recovery: "Recuperación",
+  };
+  const active = Object.entries(preferences)
+    .filter(([, enabled]) => enabled)
+    .map(([key]) => labels[key]);
+  return active.length ? active.join(", ") : "Ninguno";
+}
+
 function renderUsers() {
   const term = elements.userSearch.value.trim().toLocaleLowerCase("es-AR");
   const visible = users.filter((user) => {
@@ -77,6 +96,7 @@ function renderUsers() {
       <td>${formatDate(user.joinedAt ?? user.firstSeenAt)}</td>
       <td>${formatDate(user.lastActiveAt)}</td>
       <td>${formatLevel(user.threshold)}</td>
+      <td>${escapeHtml(formatAlertPreferences(user.alertPreferences))}</td>
       <td><span class="admin-pill ${user.active ? "is-active" : ""}">${user.active ? "Activa" : "Pausada"}</span></td>
     </tr>`).join("");
   elements.usersMessage.textContent = visible.length

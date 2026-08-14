@@ -97,23 +97,30 @@ exports.checkRiver = onSchedule(
     const payload = await getJson(observationUrl());
     const current = currentObservation(payload);
     if (!current) throw new Error('INA no devolvió una medición válida');
+    const isNewObservation = await repository.claimObservation(current.date);
+    let detection = null;
+    let statistics = null;
     try {
       const velocityData = await repository.getVelocityData();
-      const detection = calculateCurrentVelocity(payload, velocityData?.statistics, {
-        lastProcessedObservationAt: velocityData?.current?.observedAt,
+      statistics = velocityData?.statistics ?? null;
+      detection = calculateCurrentVelocity(payload, statistics, {
+        lastProcessedObservationAt: isNewObservation ? null : velocityData?.current?.observedAt,
       });
       if (detection.isNewObservation) {
-        await repository.saveVelocityDetectionIfNew(detection);
-        logger.info('Indicador de velocidad actualizado', {
-          classification: detection.code,
-          observedAt: detection.observedAt,
-          speedMetersPerHour: detection.speedMetersPerHour,
-        });
+        const saved = await repository.saveVelocityDetectionIfNew(detection);
+        if (!saved) detection = { ...detection, isNewObservation: false };
+        if (saved) {
+          logger.info('Indicador de velocidad actualizado', {
+            classification: detection.code,
+            observedAt: detection.observedAt,
+            speedMetersPerHour: detection.speedMetersPerHour,
+          });
+        }
       }
     } catch (error) {
       logger.error('No se pudo actualizar el indicador de velocidad', { error: error.message });
     }
-    return bot.checkRiver(current);
+    return bot.checkRiver(current, { isNewObservation, detection, statistics });
   },
 );
 

@@ -9,7 +9,6 @@ const FORECAST = Object.freeze({ seriesId: 26202, calId: 432 });
 const API_BASE = 'https://alerta.ina.gob.ar/pub/datos';
 const MAX_THRESHOLD = 6;
 const DEFAULT_THRESHOLD = 2.5;
-const ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
 function dateParam(date) {
   return date.toISOString().slice(0, 10);
@@ -125,15 +124,7 @@ function parseThreshold(argument) {
   return value > 0 && value <= MAX_THRESHOLD ? value : null;
 }
 
-function shouldAlert(level, threshold, lastSent = 0, now = Date.now()) {
-  return Number.isFinite(level)
-    && Number.isFinite(threshold)
-    && level >= threshold
-    && now - Number(lastSent || 0) >= ALERT_COOLDOWN_MS;
-}
-
 module.exports = {
-  ALERT_COOLDOWN_MS,
   API_BASE,
   DEFAULT_THRESHOLD,
   FORECAST,
@@ -149,5 +140,4 @@ module.exports = {
   observationUrl,
   parseDate,
   parseThreshold,
-  shouldAlert,
 };

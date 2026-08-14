@@ -18,6 +18,13 @@ test('el adaptador persiste el ciclo completo de un chat en Firestore', async (c
   assert.equal(stored.threshold, 2.5);
   assert.equal(stored.active, true);
   assert.equal(stored.dailySummary, false);
+  assert.deepEqual(stored.alertPreferences, {
+    height: true,
+    rapidRise: false,
+    rapidFall: false,
+    recovery: false,
+  });
+  assert.equal(stored.alertState.heightCondition, 'unknown');
   assert.equal(stored.lastCommand, '/start');
   assert.equal(typeof stored.joinedAt.toDate, 'function');
   const joinedAt = stored.joinedAt.toMillis();
@@ -42,14 +49,37 @@ test('el adaptador persiste el ciclo completo de un chat en Firestore', async (c
   assert.equal(await repository.claimDailySummary(chat.id, '2026-08-14'), false);
   assert.equal(await repository.claimDailySummary(chat.id, '2026-08-15'), true);
 
+  const preferences = await repository.setAlertPreference(chat.id, 'rapidRise', true);
+  assert.equal(preferences.rapidRise, true);
+  assert.equal((await repository.getChat(chat.id)).alertPreferences.rapidRise, true);
+
+  assert.equal(await repository.claimObservation('2026-08-14T14:00:00Z'), true);
+  assert.equal(await repository.claimObservation('2026-08-14T14:00:00Z'), false);
+  assert.equal(await repository.claimObservation('2026-08-14T15:00:00Z'), true);
+
   const observation = { value: 3.4, date: '2026-08-14T14:00:00Z' };
-  await repository.recordAlertSent({ id: String(chat.id), chatId: chat.id, threshold: 3.25 }, observation, 123456);
+  const alertState = {
+    heightCondition: 'above', velocityCondition: 'rapid-rise', lastObservationAt: observation.date,
+  };
+  await repository.recordAlertsSent(
+    { id: String(chat.id), chatId: chat.id, threshold: 3.25 },
+    observation,
+    alertState,
+    [
+      { type: 'height' },
+      { type: 'rapidRise', speedMetersPerHour: 0.4 },
+    ],
+    123456,
+  );
   stored = await repository.getChat(chat.id);
   assert.equal(stored.lastSent, 123456);
   assert.equal(stored.lastAlertLevel, 3.4);
   const events = await db.collection('alertEvents').get();
-  assert.equal(events.size, 1);
+  assert.equal(stored.alertState.velocityCondition, 'rapid-rise');
+  assert.deepEqual(stored.lastAlertTypes, ['height', 'rapidRise']);
+  assert.equal(events.size, 2);
   assert.equal(events.docs[0].data().threshold, 3.25);
+  assert.deepEqual(events.docs.map((document) => document.data().type).sort(), ['height', 'rapidRise']);
 
   await repository.setSystemStatus({ ok: true, chatsProcessed: 1, alertsSent: 1, errors: 0 });
   const status = await db.collection('systemStatus').doc('checkRiver').get();
