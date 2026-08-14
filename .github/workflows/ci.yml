@@ -1,24 +1,19 @@
-name: Deploy GitHub Pages
+name: Validate pull request
 
 on:
-  push:
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -37,14 +32,11 @@ jobs:
           npm ci
           npm run test:all
           npm run check
-      - name: Prepare public artifact
+      - name: Verify public artifact contents
         run: |
           mkdir -p dist/src
           cp index.html admin.html dist/
           cp src/app.js src/styles.css src/admin.js src/admin.css src/firebase.js dist/src/
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: dist
-      - id: deployment
-        uses: actions/deploy-pages@v5
+          test "$(find dist -type f | wc -l | tr -d ' ')" = "7"
+          test ! -e dist/functions
+          test ! -e dist/firestore.rules

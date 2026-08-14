@@ -44,6 +44,9 @@ crea un artefacto mínimo y no incluye `functions/`, reglas ni configuración
 backend. El panel se despliega desde `firebase-dist/`, que contiene solamente
 `admin.html` y los cuatro recursos de frontend que necesita.
 
+Cada pull request a `main` ejecuta la suite completa con el emulador de
+Firestore y verifica el contenido permitido del artefacto antes del merge.
+
 La documentación funcional y operativa completa está en
 `PLAN-IMPLEMENTACION.md`.
 
