@@ -23,6 +23,8 @@ suscriptores.
 - La web compara en un mismo gráfico las mediciones observadas de San Fernando,
   Tigre, Dique Luján y San Isidro, sin utilizar las estaciones comparativas
   para el pronóstico de San Fernando.
+- El gráfico histórico admite zoom horizontal con botones, rueda del mouse,
+  teclado o gesto de pellizcar, y desplazamiento por arrastre.
 - El indicador de subida o bajada rápida usa percentiles direccionales del
   historial de San Fernando y se identifica expresamente como una estimación
   estadística propia, separada de los niveles oficiales. La tarjeta de tendencia

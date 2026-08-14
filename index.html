@@ -78,7 +78,23 @@
             <a class="outline-button history-download" id="history-download" aria-disabled="true">Descargar CSV</a>
           </div>
         </div>
-        <div class="history-card"><p id="history-summary">Cargando historial…</p><div id="history-legend" class="history-legend" aria-label="Estaciones incluidas en el gráfico"></div><svg id="history-chart" viewBox="0 0 700 190" role="img" aria-label="Comparación histórica de alturas observadas"></svg><div id="history-list" class="history-list"></div></div>
+        <div class="history-card">
+          <p id="history-summary">Cargando historial…</p>
+          <div id="history-legend" class="history-legend" aria-label="Estaciones incluidas en el gráfico"></div>
+          <div class="history-chart-toolbar">
+            <p id="history-zoom-status" aria-live="polite">Vista completa</p>
+            <div class="history-zoom-controls" role="group" aria-label="Zoom del gráfico">
+              <button class="history-zoom-button" id="history-zoom-in" type="button" aria-label="Acercar el gráfico">＋ Acercar</button>
+              <button class="history-zoom-button" id="history-zoom-out" type="button" aria-label="Alejar el gráfico" disabled>− Alejar</button>
+              <button class="history-zoom-button" id="history-zoom-reset" type="button" disabled>Restablecer</button>
+            </div>
+          </div>
+          <div class="history-chart-frame">
+            <svg id="history-chart" viewBox="0 0 700 190" role="img" aria-label="Comparación histórica de alturas observadas. Use la rueda, arrastre o pellizque para ampliar el período." tabindex="0"></svg>
+          </div>
+          <p class="history-zoom-help">Usá la rueda o los botones para ampliar. Arrastrá para recorrer el período; en celular, pellizcá con dos dedos.</p>
+          <div id="history-list" class="history-list"></div>
+        </div>
       </section>
 
       <section class="forecast-section" aria-labelledby="forecast-title">
