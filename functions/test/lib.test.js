@@ -1,7 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  ALERT_COOLDOWN_MS,
   currentObservation,
   dailyMaximums,
   dailyRanges,
@@ -10,7 +9,6 @@ const {
   normalizeRows,
   observationUrl,
   parseThreshold,
-  shouldAlert,
 } = require('../lib');
 const observedFixture = require('./fixtures/ina-observed.json');
 const forecastFixture = require('./fixtures/ina-forecast.json');
@@ -48,14 +46,6 @@ test('valida el máximo sin convertir el argumento vacío en cero', () => {
   assert.equal(parseThreshold('6.01'), null);
   assert.equal(parseThreshold('2,50'), 2.5);
   assert.equal(parseThreshold('2.555'), null);
-});
-
-test('respeta la ventana anti-duplicado de seis horas', () => {
-  const now = Date.now();
-  assert.equal(shouldAlert(3.1, 3, 0, now), true);
-  assert.equal(shouldAlert(2.9, 3, 0, now), false);
-  assert.equal(shouldAlert(3.1, 3, now - ALERT_COOLDOWN_MS + 1, now), false);
-  assert.equal(shouldAlert(3.1, 3, now - ALERT_COOLDOWN_MS, now), true);
 });
 
 test('elige un máximo por día para el pronóstico', () => {

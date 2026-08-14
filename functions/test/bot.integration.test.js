@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createBotCore } = require('../bot-core');
+const { alertStateFromChat, normalizeAlertPreferences, normalizeAlertState } = require('../alert-machine');
 const forecastFixture = require('./fixtures/ina-forecast.json');
 
 class InMemoryRepository {
@@ -23,6 +24,8 @@ class InMemoryRepository {
       lastName: chat.last_name ?? null,
       username: chat.username ?? null,
       threshold: Number.isFinite(previous.threshold) ? previous.threshold : 2.5,
+      alertPreferences: normalizeAlertPreferences(previous.alertPreferences),
+      alertState: alertStateFromChat(previous),
       dailySummary: Boolean(previous.dailySummary),
       active: isStart ? true : Boolean(previous.active),
       firstSeenAt: previous.firstSeenAt ?? new Date(),
@@ -41,7 +44,13 @@ class InMemoryRepository {
   async setThreshold(chatId, threshold) {
     const id = String(chatId);
     const previous = this.chats.get(id) ?? { id, chatId };
-    this.chats.set(id, { ...previous, threshold, active: true, joinedAt: previous.joinedAt ?? new Date() });
+    this.chats.set(id, {
+      ...previous,
+      threshold,
+      active: true,
+      joinedAt: previous.joinedAt ?? new Date(),
+      alertState: { ...normalizeAlertState(previous.alertState), heightCondition: 'unknown' },
+    });
     this.thresholdWrites += 1;
   }
 
@@ -65,6 +74,15 @@ class InMemoryRepository {
     this.chats.set(id, { ...previous, dailySummary: enabled });
   }
 
+  async setAlertPreference(chatId, key, enabled) {
+    const id = String(chatId);
+    const previous = this.chats.get(id) ?? { id, chatId };
+    const alertPreferences = normalizeAlertPreferences(previous.alertPreferences);
+    alertPreferences[key] = Boolean(enabled);
+    this.chats.set(id, { ...previous, alertPreferences });
+    return alertPreferences;
+  }
+
   async claimDailySummary(chatId, dateKey) {
     const id = String(chatId);
     const chat = this.chats.get(id);
@@ -73,10 +91,26 @@ class InMemoryRepository {
     return true;
   }
 
-  async recordAlertSent(chat, current, sentAt) {
+  async saveAlertState(chatId, state) {
+    const id = String(chatId);
+    this.chats.set(id, { ...this.chats.get(id), alertState: normalizeAlertState(state) });
+  }
+
+  async recordAlertsSent(chat, current, state, events, sentAt) {
     const id = String(chat.id ?? chat.chatId);
-    this.chats.set(id, { ...this.chats.get(id), lastSent: sentAt, lastAlertLevel: current.value });
-    this.alertEvents.push({ chatId: chat.chatId, level: current.value, threshold: chat.threshold });
+    this.chats.set(id, {
+      ...this.chats.get(id),
+      alertState: normalizeAlertState(state),
+      lastSent: sentAt,
+      lastAlertLevel: current.value,
+      lastAlertTypes: events.map((event) => event.type),
+    });
+    events.forEach((event) => this.alertEvents.push({
+      chatId: chat.chatId,
+      type: event.type,
+      level: current.value,
+      threshold: chat.threshold,
+    }));
   }
 
   async setSystemStatus(status) {
@@ -160,6 +194,28 @@ test('procesa botones inline y registra actividad', async () => {
   assert.deepEqual(fixture.callbacks, ['callback-1']);
   assert.equal(fixture.repository.chats.get('20').lastCommand, '/estado');
   assert.match(fixture.messages[0].text, /Altura actual/);
+});
+
+test('configura avisos individuales mediante comando y botones', async () => {
+  const fixture = createFixture();
+  await fixture.bot.processUpdate(update(25, '/start'));
+  await fixture.bot.processUpdate(update(25, '/avisos', 2));
+  assert.match(fixture.messages.at(-1).text, /Altura máxima/);
+  assert.equal(fixture.repository.chats.get('25').alertPreferences.rapidRise, false);
+
+  const result = await fixture.bot.processUpdate({
+    update_id: 3,
+    callback_query: {
+      id: 'callback-avisos',
+      data: 'notice:rapidRise',
+      from: { id: 25, first_name: 'Botón' },
+      message: { chat: { id: 25 } },
+    },
+  });
+  assert.deepEqual(result, { processed: true, ok: true });
+  assert.equal(fixture.repository.chats.get('25').alertPreferences.rapidRise, true);
+  assert.match(fixture.messages.at(-1).text, /✅ Crecida rápida/);
+  assert.equal(fixture.repository.chats.get('25').lastCommand, '/avisos');
 });
 
 test('muestra rango diario en pronóstico y respeta el rango solicitado de historial', async () => {
@@ -261,9 +317,72 @@ test('checkRiver evalúa máximos independientes y continúa si falla un chat', 
     durationMs: 0,
   });
   assert.deepEqual(delivered.map((message) => message.chatId), [2]);
-  assert.deepEqual(repository.alertEvents, [{ chatId: 2, level: 2.5, threshold: 2 }]);
+  assert.deepEqual(repository.alertEvents, [{ chatId: 2, type: 'height', level: 2.5, threshold: 2 }]);
   assert.equal(repository.chats.get('1').lastSent, 0);
   assert.equal(repository.chats.get('2').lastSent, Date.parse('2026-08-14T15:00:00Z'));
+});
+
+test('envía avisos estadísticos una vez por estado y recuperación con histéresis', async () => {
+  const repository = new InMemoryRepository([{
+    id: '9',
+    chatId: 9,
+    threshold: 3,
+    active: true,
+    alertPreferences: { height: true, rapidRise: true, rapidFall: true, recovery: true },
+  }]);
+  const fixture = createFixture({ repository });
+  const statistics = { p90Ascent: 0.33, p90Descent: 0.16 };
+
+  await fixture.bot.checkRiver(
+    { value: 2.5, date: '2026-08-14T12:00:00Z' },
+    {
+      isNewObservation: true,
+      statistics,
+      detection: { code: 'rapid-rise', speedMetersPerHour: 0.4, speedCentimetersPerHour: 40 },
+    },
+  );
+  assert.match(fixture.messages.at(-1).text, /Crecida rápida/);
+  assert.equal(fixture.messages.at(-1).text.includes('Alcanzó tu altura'), false);
+
+  await fixture.bot.checkRiver(
+    { value: 3.1, date: '2026-08-14T13:00:00Z' },
+    {
+      isNewObservation: true,
+      statistics,
+      detection: { code: 'rapid-rise', speedMetersPerHour: 0.5, speedCentimetersPerHour: 50 },
+    },
+  );
+  assert.match(fixture.messages.at(-1).text, /Alcanzó tu altura/);
+  assert.equal(fixture.messages.at(-1).text.match(/Crecida rápida/g), null);
+
+  const beforeHysteresis = fixture.messages.length;
+  await fixture.bot.checkRiver(
+    { value: 2.91, date: '2026-08-14T14:00:00Z' },
+    { isNewObservation: true, statistics, detection: { code: 'normal-fall' } },
+  );
+  assert.equal(fixture.messages.length, beforeHysteresis);
+
+  await fixture.bot.checkRiver(
+    { value: 2.9, date: '2026-08-14T15:00:00Z' },
+    { isNewObservation: true, statistics, detection: { code: 'normal-fall' } },
+  );
+  assert.match(fixture.messages.at(-1).text, /Recuperación/);
+  assert.deepEqual(repository.alertEvents.map((event) => event.type), ['rapidRise', 'height', 'recovery']);
+});
+
+test('no procesa chats cuando el INA todavía devuelve la misma medición', async () => {
+  const repository = new InMemoryRepository([{
+    id: '11', chatId: 11, threshold: 1, active: true,
+  }]);
+  const fixture = createFixture({ repository });
+  const status = await fixture.bot.checkRiver(
+    { value: 3.2, date: '2026-08-14T12:00:00Z' },
+    { isNewObservation: false, detection: { code: 'rapid-rise' } },
+  );
+  assert.equal(status.chatsProcessed, 0);
+  assert.equal(status.alertsSent, 0);
+  assert.deepEqual(repository.alertEvents, []);
+  assert.equal(repository.chats.get('11').alertState, undefined);
 });
 
 test('registra el estado fallido y propaga un error del INA sin generar alertas', async () => {

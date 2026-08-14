@@ -1,13 +1,15 @@
-import { buildHistoryCsv, historyCsvFilename } from "./history.mjs";
+import { buildHistoryCsv, historyChartRows, historyCsvFilename } from "./history.mjs";
 
 const API_BASE = "https://alerta.ina.gob.ar/pub/datos";
 const PUBLIC_STATUS_URL = "https://us-central1-rio-en-alerta-sanfernando.cloudfunctions.net/publicRiverStatus";
-const STATION = { siteCode: 52, seriesId: 52, varId: 2, name: "San Fernando" };
-const OBSERVED_STATIONS = [
-  { siteCode: 49, varId: 2, name: "Tigre", river: "Río Luján" },
-  { siteCode: 50, varId: 2, name: "Dique Luján", river: "Río Luján" },
-  { siteCode: 53, varId: 2, name: "San Isidro", river: "Río de la Plata" },
+const STATION = { siteCode: 52, seriesId: 52, varId: 2, name: "San Fernando", river: "Río Luján", color: "#075a70" };
+const HISTORY_STATIONS = [
+  STATION,
+  { siteCode: 49, varId: 2, name: "Tigre", river: "Río Luján", color: "#d17c21" },
+  { siteCode: 50, varId: 2, name: "Dique Luján", river: "Río Luján", color: "#6c5aa7" },
+  { siteCode: 53, varId: 2, name: "San Isidro", river: "Río de la Plata", color: "#2f8a63" },
 ];
+const OBSERVED_STATIONS = HISTORY_STATIONS.slice(1);
 
 const elements = {
   connectionStatus: document.querySelector("#connection-status"),
@@ -21,16 +23,18 @@ const elements = {
   trendDescription: document.querySelector("#trend-description"),
   trendElapsed: document.querySelector("#trend-elapsed"),
   trendSpeed: document.querySelector("#trend-speed"),
+  trendAlertSpeed: document.querySelector("#trend-alert-speed"),
   trendNote: document.querySelector("#trend-note"),
   velocityMethodology: document.querySelector("#velocity-methodology"),
   stationGrid: document.querySelector("#station-grid"),
   forecastGrid: document.querySelector("#forecast-grid"),
-  historyRange: document.querySelector("#history-range"), historyDownload: document.querySelector("#history-download"), historyChart: document.querySelector("#history-chart"), historyList: document.querySelector("#history-list"), historySummary: document.querySelector("#history-summary"),
+  historyRange: document.querySelector("#history-range"), historyDownload: document.querySelector("#history-download"), historyChart: document.querySelector("#history-chart"), historyLegend: document.querySelector("#history-legend"), historyList: document.querySelector("#history-list"), historySummary: document.querySelector("#history-summary"),
 };
 
 let thresholds = { alert: 3, evacuation: 3.5 };
 let latest = { current: null, forecast: [], history: [] };
 let historyDownloadUrl = null;
+let historyRequestId = 0;
 
 function setHistoryDownload(rows, days) {
   if (historyDownloadUrl) URL.revokeObjectURL(historyDownloadUrl);
@@ -140,6 +144,7 @@ function renderCurrent(observations) {
   elements.trendDescription.textContent = previous ? `Variación de ${formatLevel(Math.abs(delta))} m respecto de la lectura anterior.` : "Todavía no hay una lectura previa para comparar.";
   elements.trendElapsed.textContent = "Tiempo transcurrido: calculando…";
   elements.trendSpeed.textContent = "Velocidad: calculando…";
+  elements.trendAlertSpeed.textContent = "Velocidad de alerta estadística: calculando…";
   elements.trendNote.textContent = "Cargando el indicador estadístico.";
 }
 
@@ -151,6 +156,7 @@ function renderVelocityStatus(payload) {
     elements.trendLabel.textContent = "Datos insuficientes";
     elements.trendElapsed.textContent = "Tiempo transcurrido: —";
     elements.trendSpeed.textContent = "Velocidad: —";
+    elements.trendAlertSpeed.textContent = "Velocidad de alerta estadística: no disponible";
     elements.trendNote.textContent = "Datos insuficientes para calcular la velocidad";
     return;
   }
@@ -160,6 +166,9 @@ function renderVelocityStatus(payload) {
   elements.trendDescription.textContent = `Variación desde la lectura anterior: ${formatSigned(current.change)} m.`;
   elements.trendElapsed.textContent = `Tiempo transcurrido: ${formatElapsed(current.hours)}`;
   elements.trendSpeed.textContent = `Velocidad: ${formatSigned(speed)} m/h (${formatSigned(current.speedCentimetersPerHour, 1)} cm/h)`;
+  const ascentAlertSpeed = Number(statistics.p90Ascent);
+  const descentAlertSpeed = -Math.abs(Number(statistics.p90Descent));
+  elements.trendAlertSpeed.textContent = `Velocidad de alerta estadística: subida ≥ ${formatSigned(ascentAlertSpeed)} m/h (${formatSigned(ascentAlertSpeed * 100, 1)} cm/h) · bajada ≤ ${formatSigned(descentAlertSpeed)} m/h (${formatSigned(descentAlertSpeed * 100, 1)} cm/h)`;
   const rapid = current.code === "rapid-rise" || current.code === "rapid-fall";
   elements.trendNote.textContent = rapid
     ? `${current.label}: esta velocidad pertenece al 10 % de las variaciones históricas más rápidas de su tipo en San Fernando.`
@@ -251,36 +260,71 @@ async function refresh() {
 }
 
 async function loadHistory() {
+  const requestId = ++historyRequestId;
   const days = Number(elements.historyRange.value);
   const end = new Date();
   const start = new Date(end);
   start.setDate(start.getDate() - days);
   setHistoryDownload([], days);
   latest.history = [];
+  elements.historySummary.textContent = "Cargando historial y estaciones comparativas…";
+  elements.historyLegend.innerHTML = "";
+  elements.historyChart.innerHTML = "";
+  elements.historyList.innerHTML = "";
   try {
-    const rows = normalizeObservations(await getJson("datos", {
-      timeStart: start.toISOString().slice(0, 10), timeEnd: end.toISOString().slice(0, 10), siteCode: 52, varId: 2, format: "json",
+    const series = await Promise.all(HISTORY_STATIONS.map(async (station) => {
+      try {
+        const rows = normalizeObservations(await getJson("datos", {
+          timeStart: start.toISOString().slice(0, 10),
+          timeEnd: end.toISOString().slice(0, 10),
+          siteCode: station.siteCode,
+          varId: station.varId,
+          format: "json",
+        }));
+        return { ...station, rows, chartRows: historyChartRows(rows, days) };
+      } catch (error) {
+        console.error(`No se pudo cargar el historial de ${station.name}`, error);
+        return { ...station, rows: [], chartRows: [], error };
+      }
     }));
-    if (!rows.length) throw new Error("El INA no devolvió mediciones históricas.");
-    latest.history = rows;
-    setHistoryDownload(rows, days);
-    const shown = days === 1 ? rows : rows.filter((_, i) => i === 0 || i === rows.length - 1 || i % Math.max(1, Math.floor(rows.length / 12)) === 0);
-    const values = rows.map((row) => row.value);
+    if (requestId !== historyRequestId) return;
+    const mainSeries = series.find((item) => item.siteCode === STATION.siteCode);
+    if (!mainSeries?.rows.length) throw new Error("El INA no devolvió mediciones históricas de San Fernando.");
+    const availableSeries = series.filter((item) => item.chartRows.length);
+    const chartRows = availableSeries.flatMap((item) => item.chartRows);
+    latest.history = mainSeries.rows;
+    setHistoryDownload(mainSeries.rows, days);
+    const values = mainSeries.rows.map((row) => row.value);
     const min = Math.min(...values);
     const max = Math.max(...values);
-    const scaleMin = Math.min(0, min);
-    const scaleMax = Math.max(thresholds.evacuation, max);
+    const chartValues = chartRows.map((row) => row.value);
+    const scaleMin = Math.min(0, ...chartValues);
+    const scaleMax = Math.max(thresholds.evacuation, ...chartValues);
     const span = scaleMax - scaleMin || 1;
-    const x = (index) => index / (shown.length - 1 || 1) * 620 + 60;
+    const firstTimestamp = Math.min(...chartRows.map((row) => asDate(row.date).getTime()));
+    const lastTimestamp = Math.max(...chartRows.map((row) => asDate(row.date).getTime()));
+    const timeSpan = lastTimestamp - firstTimestamp || 1;
+    const x = (date) => (asDate(date).getTime() - firstTimestamp) / timeSpan * 620 + 60;
     const y = (value) => 165 - (value - scaleMin) / span * 125;
-    const points = shown.map((row, index) => `${x(index)},${y(row.value)}`).join(" ");
-    const stamp = (index) => new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(asDate(shown[index].date));
+    const stamp = (date) => new Intl.DateTimeFormat("es-AR", days >= 90
+      ? { month: "short", year: "2-digit", timeZone: "America/Argentina/Buenos_Aires" }
+      : { day: "numeric", month: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(asDate(date));
     const compact = (row) => new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" }).format(asDate(row.date)).replace(",", " ·");
-    elements.historyChart.innerHTML = `<line x1="60" y1="165" x2="690" y2="165"/><line x1="60" y1="40" x2="60" y2="165"/><text x="4" y="45">${formatLevel(scaleMax)} m</text><text x="4" y="165">${formatLevel(scaleMin)} m</text><line class="threshold-line threshold-evacuation" x1="60" y1="${y(thresholds.evacuation)}" x2="690" y2="${y(thresholds.evacuation)}"/><text class="threshold-label" text-anchor="end" x="688" y="${y(thresholds.evacuation) - 4}">Evacuación 3,50 m</text><line class="threshold-line threshold-alert" x1="60" y1="${y(thresholds.alert)}" x2="690" y2="${y(thresholds.alert)}"/><text class="threshold-label" text-anchor="end" x="688" y="${y(thresholds.alert) - 4}">Alerta 3,00 m</text><polyline points="${points}"/>${shown.map((row, index) => `<circle cx="${x(index)}" cy="${y(row.value)}" r="4"><title>${formatDate(row.date)}: ${formatLevel(row.value)} m</title></circle>`).join("")}<text x="60" y="187">${stamp(0)}</text><text text-anchor="end" x="690" y="187">${stamp(shown.length - 1)}</text>`;
-    elements.historySummary.textContent = `${rows.length} mediciones en el rango · mínimo ${formatLevel(min)} m · máximo ${formatLevel(max)} m`;
-    elements.historyList.innerHTML = shown.slice(-4).map((row) => `<div class="history-item">${compact(row)}<strong>${formatLevel(row.value)} m</strong></div>`).join("");
+    const showPoints = chartRows.length <= 160;
+    const seriesMarkup = availableSeries.map((item) => {
+      const points = item.chartRows.map((row) => `${x(row.date)},${y(row.value)}`).join(" ");
+      const circles = showPoints ? item.chartRows.map((row) => `<circle class="history-point" style="fill:${item.color}" cx="${x(row.date)}" cy="${y(row.value)}" r="3"><title>${item.name} · ${days === 1 ? formatDate(row.date) : stamp(row.date)}: ${formatLevel(row.value)} m${row.samples ? ` · ${row.samples} mediciones` : ""}</title></circle>`).join("") : "";
+      return `<polyline class="history-series" style="stroke:${item.color}" points="${points}"><title>${item.name}</title></polyline>${circles}`;
+    }).join("");
+    elements.historyChart.innerHTML = `<line x1="60" y1="165" x2="690" y2="165"/><line x1="60" y1="40" x2="60" y2="165"/><text x="4" y="45">${formatLevel(scaleMax)} m</text><text x="4" y="165">${formatLevel(scaleMin)} m</text><line class="threshold-line threshold-evacuation" x1="60" y1="${y(thresholds.evacuation)}" x2="690" y2="${y(thresholds.evacuation)}"/><text class="threshold-label" text-anchor="end" x="688" y="${y(thresholds.evacuation) - 4}">Evacuación 3,50 m</text><line class="threshold-line threshold-alert" x1="60" y1="${y(thresholds.alert)}" x2="690" y2="${y(thresholds.alert)}"/><text class="threshold-label" text-anchor="end" x="688" y="${y(thresholds.alert) - 4}">Alerta 3,00 m</text>${seriesMarkup}<text x="60" y="187">${stamp(new Date(firstTimestamp).toISOString())}</text><text text-anchor="end" x="690" y="187">${stamp(new Date(lastTimestamp).toISOString())}</text>`;
+    elements.historyLegend.innerHTML = availableSeries.map((item) => `<span class="history-legend-item"><i style="background:${item.color}"></i>${item.name}</span>`).join("");
+    const resolution = days === 1 ? "mediciones horarias" : "promedios diarios";
+    elements.historySummary.textContent = `San Fernando: ${mainSeries.rows.length} mediciones · mínimo ${formatLevel(min)} m · máximo ${formatLevel(max)} m. Gráfico con ${resolution} de ${availableSeries.length} estaciones.`;
+    elements.historyList.innerHTML = mainSeries.rows.slice(-4).map((row) => `<div class="history-item">${compact(row)}<strong>${formatLevel(row.value)} m</strong></div>`).join("");
   } catch (error) {
+    if (requestId !== historyRequestId) return;
     elements.historySummary.textContent = "No se pudo cargar el historial.";
+    elements.historyLegend.innerHTML = "";
     elements.historyChart.innerHTML = "";
     elements.historyList.innerHTML = "";
     console.error(error);

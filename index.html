@@ -53,6 +53,7 @@
           <div class="trend-metrics">
             <p id="trend-elapsed">Tiempo transcurrido: —</p>
             <p id="trend-speed">Velocidad: calculando…</p>
+            <p id="trend-alert-speed">Velocidad de alerta estadística: calculando…</p>
           </div>
           <p class="trend-note" id="trend-note">Cargando el indicador estadístico.</p>
           <div class="source-note">Fuente: INA · SIyAH</div>
@@ -73,11 +74,11 @@
         <div class="section-heading">
           <div><p class="eyebrow">Datos observados</p><h2 id="history-title">Historial del río</h2></div>
           <div class="history-controls">
-            <label>Ver <select id="history-range"><option value="1">por hora · 24 h</option><option value="7">por día · 7 días</option><option value="30">por día · 30 días</option></select></label>
+            <label>Ver <select id="history-range"><option value="1">por hora · 24 h</option><option value="7">promedio diario · 7 días</option><option value="30">promedio diario · 30 días</option><option value="90">promedio diario · 3 meses</option><option value="180">promedio diario · 6 meses</option><option value="365">promedio diario · 12 meses</option></select></label>
             <a class="outline-button history-download" id="history-download" aria-disabled="true">Descargar CSV</a>
           </div>
         </div>
-        <div class="history-card"><p id="history-summary">Cargando historial…</p><svg id="history-chart" viewBox="0 0 700 190" role="img" aria-label="Gráfico de altura histórica"></svg><div id="history-list" class="history-list"></div></div>
+        <div class="history-card"><p id="history-summary">Cargando historial…</p><div id="history-legend" class="history-legend" aria-label="Estaciones incluidas en el gráfico"></div><svg id="history-chart" viewBox="0 0 700 190" role="img" aria-label="Comparación histórica de alturas observadas"></svg><div id="history-list" class="history-list"></div></div>
       </section>
 
       <section class="forecast-section" aria-labelledby="forecast-title">

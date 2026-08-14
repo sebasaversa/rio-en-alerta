@@ -6,8 +6,12 @@ const {
   normalizeRows,
   parseDate,
   parseThreshold,
-  shouldAlert,
 } = require('./lib');
+const {
+  alertStateFromChat,
+  evaluateAlertTransition,
+  normalizeAlertPreferences,
+} = require('./alert-machine');
 
 const WEB_URL = 'https://sebasaversa.github.io/rio-en-alerta/';
 
@@ -16,6 +20,7 @@ const COMMANDS = [
   { command: 'maximo', description: 'Ver o cambiar tu altura máxima' },
   { command: 'pronostico', description: 'Ver los próximos días' },
   { command: 'historial', description: 'Ver las últimas mediciones' },
+  { command: 'avisos', description: 'Elegir qué avisos recibir' },
   { command: 'resumen', description: 'Configurar el resumen de las 08:00' },
   { command: 'pausar', description: 'Pausar alertas automáticas' },
   { command: 'activar', description: 'Activar alertas automáticas' },
@@ -34,6 +39,7 @@ const HELP_TEXT = [
   '• /historial 24h — ver las últimas 24 horas',
   '• /historial 7d — resumir los últimos 7 días',
   '• /historial 30d — resumir los últimos 30 días',
+  '• /avisos — elegir avisos por altura, crecida, bajante o recuperación',
   '• /resumen — ver el estado del resumen diario',
   '• /resumen activar — recibirlo todos los días a las 08:00',
   '• /resumen pausar — dejar de recibirlo',
@@ -56,11 +62,33 @@ const MAIN_KEYBOARD = {
       { text: '📈 Historial', callback_data: 'cmd:historial' },
     ],
     [
+      { text: '🔔 Mis avisos', callback_data: 'cmd:avisos' },
       { text: '🌅 Resumen diario', callback_data: 'cmd:resumen' },
+    ],
+    [
       { text: 'ℹ️ Ayuda', callback_data: 'cmd:ayuda' },
     ],
   ],
 };
+
+const ALERT_PREFERENCE_TYPES = Object.freeze({
+  altura: 'height',
+  height: 'height',
+  crecida: 'rapidRise',
+  rapidrise: 'rapidRise',
+  bajante: 'rapidFall',
+  rapidfall: 'rapidFall',
+  recuperacion: 'recovery',
+  recuperación: 'recovery',
+  recovery: 'recovery',
+});
+
+const ALERT_PREFERENCE_LABELS = Object.freeze({
+  height: 'Altura máxima',
+  rapidRise: 'Crecida rápida',
+  rapidFall: 'Bajante rápida',
+  recovery: 'Recuperación',
+});
 
 function formatLevel(value) {
   return Number(value).toLocaleString('es-AR', {
@@ -86,6 +114,63 @@ function formatDate(value, options = {}) {
   };
   if (options.timeStyle !== null) formatOptions.timeStyle = options.timeStyle ?? 'short';
   return new Intl.DateTimeFormat('es-AR', formatOptions).format(date);
+}
+
+function alertPreferencesKeyboard(value) {
+  const preferences = normalizeAlertPreferences(value);
+  const button = (key, emoji) => ({
+    text: `${preferences[key] ? '✅' : '⬜'} ${emoji} ${ALERT_PREFERENCE_LABELS[key]}`,
+    callback_data: `notice:${key}`,
+  });
+  return {
+    inline_keyboard: [
+      [button('height', '📏'), button('recovery', '✅')],
+      [button('rapidRise', '📈'), button('rapidFall', '📉')],
+      [{ text: '↩️ Volver', callback_data: 'cmd:ayuda' }],
+    ],
+  };
+}
+
+function alertPreferencesText(value, active = true) {
+  const preferences = normalizeAlertPreferences(value);
+  const lines = Object.entries(ALERT_PREFERENCE_LABELS).map(([key, label]) => (
+    `${preferences[key] ? '✅' : '⬜'} ${label}`
+  ));
+  return [
+    '🔔 *Tus avisos automáticos*',
+    '',
+    ...lines,
+    '',
+    active
+      ? 'Tocá un botón para activar o pausar cada tipo de aviso.'
+      : 'Todos están temporalmente pausados. Usá /activar para volver a recibirlos.',
+    '',
+    '_Crecida y bajante rápidas son indicadores estadísticos de Río en Alerta, no alertas oficiales._',
+  ].join('\n');
+}
+
+function buildAlertMessage(chat, current, events) {
+  const details = events.map((event) => {
+    if (event.type === 'height') {
+      return `🔔 Alcanzó tu altura seleccionada de *${formatLevel(event.threshold)} m*.`;
+    }
+    if (event.type === 'recovery') {
+      return `✅ *Recuperación:* bajó al menos 10 cm por debajo de tu altura seleccionada (*${formatLevel(event.recoveryLevel)} m*).`;
+    }
+    if (event.type === 'rapidRise') {
+      return `📈 *Crecida rápida:* ${formatSigned(event.speedMetersPerHour)} m/h (${formatSigned(event.speedCentimetersPerHour, 1)} cm/h), igual o superior al p90 de ${formatSigned(event.p90MetersPerHour)} m/h.`;
+    }
+    return `📉 *Bajante rápida:* ${formatSigned(event.speedMetersPerHour)} m/h (${formatSigned(event.speedCentimetersPerHour, 1)} cm/h), igual o inferior al p90 de ${formatSigned(event.p90MetersPerHour)} m/h.`;
+  });
+  const hasStatisticalEvent = events.some((event) => event.type === 'rapidRise' || event.type === 'rapidFall');
+  return [
+    '⚠️ *Río en Alerta*',
+    `${STATION.river} — ${STATION.name}: *${formatLevel(current.value)} m*`,
+    `Medición: ${formatDate(current.date)} ART`,
+    '',
+    ...details,
+    ...(hasStatisticalEvent ? ['', '_Indicador estadístico de Río en Alerta. No constituye una alerta oficial del INA._'] : []),
+  ].join('\n');
 }
 
 function createBotCore(options) {
@@ -126,7 +211,7 @@ function createBotCore(options) {
       return;
     }
     await repository.setThreshold(chatId, value);
-    await sendMessage(chatId, `✅ Tu altura máxima quedó configurada en *${formatLevel(value)} m*.\nLas alertas están activas.`, MAIN_KEYBOARD);
+    await sendMessage(chatId, `✅ Tu altura máxima quedó configurada en *${formatLevel(value)} m*.\nPara elegir qué avisos recibir, usá /avisos.`, MAIN_KEYBOARD);
   }
 
   async function commandPronostico(chatId) {
@@ -195,6 +280,26 @@ function createBotCore(options) {
     await sendMessage(chatId, 'Usá /resumen activar o /resumen pausar.', MAIN_KEYBOARD);
   }
 
+  async function commandAvisos(chatId, argument) {
+    const data = await repository.getChat(chatId);
+    if (!data?.joinedAt) {
+      await sendMessage(chatId, 'Primero enviá /start para configurar tus avisos.', MAIN_KEYBOARD);
+      return;
+    }
+    let preferences = normalizeAlertPreferences(data.alertPreferences);
+    const normalizedArgument = argument.trim().toLowerCase();
+    if (normalizedArgument) {
+      const key = ALERT_PREFERENCE_TYPES[normalizedArgument]
+        ?? (Object.hasOwn(preferences, normalizedArgument) ? normalizedArgument : null);
+      if (!key) {
+        await sendMessage(chatId, 'Usá /avisos y elegí una opción con los botones.', alertPreferencesKeyboard(preferences));
+        return;
+      }
+      preferences = await repository.setAlertPreference(chatId, key, !preferences[key]);
+    }
+    await sendMessage(chatId, alertPreferencesText(preferences, data.active), alertPreferencesKeyboard(preferences));
+  }
+
   async function processCommand(chatId, chat, text) {
     const { command, argument } = normalizeCommand(text);
     const isStart = command === '/start';
@@ -222,6 +327,9 @@ function createBotCore(options) {
       case '/historial':
         await commandHistorial(chatId, argument);
         break;
+      case '/avisos':
+        await commandAvisos(chatId, argument);
+        break;
       case '/resumen':
         await commandResumen(chatId, argument);
         break;
@@ -245,6 +353,7 @@ function createBotCore(options) {
     const chat = callback?.from ?? message?.from;
     let text = message?.text?.trim();
     if (callback?.data?.startsWith('cmd:')) text = `/${callback.data.slice(4)}`;
+    if (callback?.data?.startsWith('notice:')) text = `/avisos ${callback.data.slice(7)}`;
     if (!chatId || !chat || !text) return { processed: false };
     if (callback?.id) {
       await answerCallbackQuery(callback.id).catch((error) => {
@@ -270,26 +379,48 @@ function createBotCore(options) {
     }
   }
 
-  async function checkRiver(currentOverride = null) {
+  async function checkRiver(currentOverride = null, alertContext = {}) {
     const startedAt = now();
     let chatsProcessed = 0;
     let alertsSent = 0;
     let errors = 0;
     try {
       const current = currentOverride ?? await getCurrentObservation();
+      const isNewObservation = alertContext.isNewObservation ?? true;
+      if (!isNewObservation) {
+        const status = {
+          ok: true,
+          level: current.value,
+          observedAt: current.date,
+          chatsProcessed: 0,
+          alertsSent: 0,
+          errors: 0,
+          durationMs: now() - startedAt,
+        };
+        await repository.setSystemStatus(status);
+        logger.info('Revisión horaria sin nueva medición', { observedAt: current.date });
+        return status;
+      }
       const chats = await repository.listActiveChats();
       for (const chat of chats) {
         chatsProcessed += 1;
-        if (!shouldAlert(current.value, Number(chat.threshold), chat.lastSent, now())) continue;
+        const transition = evaluateAlertTransition({
+          current,
+          threshold: Number(chat.threshold),
+          preferences: chat.alertPreferences,
+          previousState: alertStateFromChat(chat),
+          velocity: alertContext.detection,
+          statistics: alertContext.statistics,
+          isNewObservation,
+        });
+        if (!transition.processed) continue;
         try {
-          await sendMessage(chat.chatId, [
-            '⚠️ *Río en Alerta*',
-            `${STATION.river} — ${STATION.name}: *${formatLevel(current.value)} m*`,
-            `Tu altura seleccionada: *${formatLevel(chat.threshold)} m*`,
-            `Medición consultada: ${formatDate(current.date)} ART`,
-          ].join('\n'), MAIN_KEYBOARD);
-          const sentAt = now();
-          await repository.recordAlertSent(chat, current, sentAt);
+          if (!transition.events.length) {
+            await repository.saveAlertState(chat.chatId, transition.state);
+            continue;
+          }
+          await sendMessage(chat.chatId, buildAlertMessage(chat, current, transition.events), MAIN_KEYBOARD);
+          await repository.recordAlertsSent(chat, current, transition.state, transition.events, now());
           alertsSent += 1;
         } catch (error) {
           errors += 1;
@@ -360,9 +491,13 @@ function createBotCore(options) {
 }
 
 module.exports = {
+  ALERT_PREFERENCE_LABELS,
   COMMANDS,
   HELP_TEXT,
   MAIN_KEYBOARD,
+  alertPreferencesKeyboard,
+  alertPreferencesText,
+  buildAlertMessage,
   createBotCore,
   formatDate,
   formatLevel,

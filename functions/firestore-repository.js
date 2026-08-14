@@ -1,8 +1,14 @@
 const { DEFAULT_THRESHOLD } = require('./lib');
+const {
+  alertStateFromChat,
+  normalizeAlertPreferences,
+  normalizeAlertState,
+} = require('./alert-machine');
 
 function createFirestoreRepository({ db, FieldValue }) {
   const chats = db.collection('telegramChats');
   const velocityRef = db.collection('publicData').doc('velocity');
+  const alertMachineRef = db.collection('systemStatus').doc('alertMachine');
 
   async function touchChat(chat, command, { isStart = false } = {}) {
     const ref = chats.doc(String(chat.id));
@@ -15,6 +21,8 @@ function createFirestoreRepository({ db, FieldValue }) {
         lastName: chat.last_name ?? null,
         username: chat.username ?? null,
         threshold: Number.isFinite(previous.threshold) ? previous.threshold : DEFAULT_THRESHOLD,
+        alertPreferences: normalizeAlertPreferences(previous.alertPreferences),
+        alertState: alertStateFromChat(previous),
         dailySummary: Boolean(previous.dailySummary),
         active: isStart ? true : Boolean(previous.active),
         firstSeenAt: previous.firstSeenAt ?? FieldValue.serverTimestamp(),
@@ -36,7 +44,14 @@ function createFirestoreRepository({ db, FieldValue }) {
     const ref = chats.doc(String(chatId));
     await db.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(ref);
-      const update = { threshold, active: true };
+      const update = {
+        threshold,
+        active: true,
+        alertState: {
+          ...normalizeAlertState(snapshot.data()?.alertState),
+          heightCondition: 'unknown',
+        },
+      };
       if (!snapshot.data()?.joinedAt) update.joinedAt = FieldValue.serverTimestamp();
       transaction.set(ref, update, { merge: true });
     });
@@ -66,6 +81,18 @@ function createFirestoreRepository({ db, FieldValue }) {
     await chats.doc(String(chatId)).set({ dailySummary: enabled }, { merge: true });
   }
 
+  async function setAlertPreference(chatId, key, enabled) {
+    const ref = chats.doc(String(chatId));
+    return db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const preferences = normalizeAlertPreferences(snapshot.data()?.alertPreferences);
+      if (!Object.hasOwn(preferences, key)) throw new RangeError('Tipo de aviso desconocido');
+      preferences[key] = Boolean(enabled);
+      transaction.set(ref, { alertPreferences: preferences }, { merge: true });
+      return preferences;
+    });
+  }
+
   async function claimDailySummary(chatId, dateKey) {
     const ref = chats.doc(String(chatId));
     return db.runTransaction(async (transaction) => {
@@ -80,23 +107,48 @@ function createFirestoreRepository({ db, FieldValue }) {
     });
   }
 
-  async function recordAlertSent(chat, current, sentAt) {
+  async function saveAlertState(chatId, state) {
+    await chats.doc(String(chatId)).set({
+      alertState: normalizeAlertState(state),
+      alertStateUpdatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+
+  async function recordAlertsSent(chat, current, state, events, sentAt) {
     const ref = chats.doc(String(chat.id ?? chat.chatId));
-    const eventRef = db.collection('alertEvents').doc();
     const batch = db.batch();
     batch.update(ref, {
+      alertState: normalizeAlertState(state),
+      alertStateUpdatedAt: FieldValue.serverTimestamp(),
       lastSent: sentAt,
       lastAlertAt: FieldValue.serverTimestamp(),
       lastAlertLevel: current.value,
+      lastAlertTypes: events.map((event) => event.type),
     });
-    batch.set(eventRef, {
-      chatId: chat.chatId,
-      level: current.value,
-      threshold: chat.threshold,
-      observedAt: current.date,
-      sentAt: FieldValue.serverTimestamp(),
+    events.forEach((event) => {
+      batch.set(db.collection('alertEvents').doc(), {
+        chatId: chat.chatId,
+        type: event.type,
+        level: current.value,
+        threshold: chat.threshold,
+        observedAt: current.date,
+        speedMetersPerHour: Number.isFinite(event.speedMetersPerHour) ? event.speedMetersPerHour : null,
+        sentAt: FieldValue.serverTimestamp(),
+      });
     });
     await batch.commit();
+  }
+
+  async function claimObservation(observedAt) {
+    return db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(alertMachineRef);
+      if (snapshot.data()?.lastObservationAt === observedAt) return false;
+      transaction.set(alertMachineRef, {
+        lastObservationAt: observedAt,
+        claimedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return true;
+    });
   }
 
   async function setSystemStatus(status) {
@@ -133,12 +185,15 @@ function createFirestoreRepository({ db, FieldValue }) {
   return {
     getChat,
     getVelocityData,
+    claimObservation,
     claimDailySummary,
     listActiveChats,
     listDailySummaryChats,
-    recordAlertSent,
+    recordAlertsSent,
+    saveAlertState,
     saveVelocityDetectionIfNew,
     setActive,
+    setAlertPreference,
     setDailySummary,
     setSystemStatus,
     setThreshold,

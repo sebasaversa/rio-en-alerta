@@ -28,7 +28,7 @@ INA ni otras autoridades competentes.
 Permitir que una persona pueda:
 
 - consultar la altura actual del Rio Lujan en San Fernando;
-- ver historial por hora, dia, semana o mes;
+- ver historial por hora o por promedios diarios de hasta 12 meses;
 - consultar el pronostico de los proximos dias;
 - recibir alertas por Telegram cuando la altura alcance su maximo configurado;
 - consultar o cambiar su configuracion desde el bot;
@@ -50,9 +50,13 @@ Estado de referencia: 14 de agosto de 2026.
 - `[x]` Reglas de Firestore desplegadas para aislar documentos por usuario.
 - `[x]` Consulta de datos observados del INA para `siteCode=52`, `varId=2`.
 - `[x]` Consulta de pronostico calibrado de San Fernando.
-- `[x]` Historial web con seleccion de 24 horas, 7 dias y 30 dias.
+- `[x]` Historial web con seleccion de 24 horas, 7 dias, 30 dias, 3 meses,
+  6 meses y 12 meses.
 - `[x]` Historial ordenado de mas antiguo a mas reciente.
 - `[x]` Descarga CSV del historial completo para el rango seleccionado.
+- `[x]` Grafico historico comparativo de San Fernando, Tigre, Dique Lujan y
+  San Isidro; las tres estaciones adicionales son solo observadas y no se usan
+  en el pronostico.
 - `[x]` Vista movil optimizada.
 - `[x]` Seccion de alertas web eliminada; las alertas se gestionan por Telegram.
 - `[x]` Bot Telegram creado, secreto `TELEGRAM_BOT_TOKEN` guardado y webhook
@@ -72,7 +76,8 @@ Estado de referencia: 14 de agosto de 2026.
   protegen el contrato externo en la suite automatizada.
 - `[x]` Vista privada publicada en Firebase Hosting, Google Sign-In habilitado,
   cuenta propietaria autorizada y acceso interactivo validado.
-- `[x]` Visualizacion de `lastActiveAt` publicada en la vista administrativa.
+- `[x]` Visualizacion de `lastActiveAt` y preferencias de avisos en la vista
+  administrativa.
 - `[x]` Workflow publica solo el artefacto web permitido y termino en `success`.
 - `[x]` Las pull requests a `main` ejecutan pruebas del bot, integracion con el
   emulador de Firestore, validacion sintactica e inspeccion del artefacto web
@@ -86,6 +91,8 @@ Estado de referencia: 14 de agosto de 2026.
 - `[x]` Comparacion observada de Tigre, Dique Lujan y San Isidro, sin usar esas
   estaciones para el pronostico.
 - `[x]` Indicador estadistico de velocidad por percentil 90 para San Fernando.
+- `[x]` Tarjeta de tendencia con velocidad actual y velocidades estadisticas de
+  alerta para subida y bajada rapida, expresadas en m/h y cm/h.
 - `[x]` Resumen diario opcional por Telegram a las 08:00 ART.
 - `[x]` Grafico historico con niveles oficiales de alerta y evacuacion.
 
@@ -347,7 +354,7 @@ La semantica debe ser estricta:
 - altura maxima individual por chat;
 - `/estado`, `/maximo` y `/ayuda`;
 - consulta horaria del INA mediante `checkRiver`;
-- alerta con pausa anti-duplicado de seis horas;
+- alerta por altura con maquina de estados e histeresis de 10 cm;
 - webhook Firebase protegido por secreto.
 
 ### Entrega complementaria de Telegram
@@ -365,15 +372,15 @@ La semantica debe ser estricta:
 - `[x]` comparacion observada entre San Fernando, Tigre, Dique Lujan y San
   Isidro, sin incorporarlas al pronostico;
 - `[x]` deteccion estadistica de subidas o bajadas rapidas por percentil 90;
-- `[!]` alertas diferenciadas para crecida, bajante y recuperacion;
+- `[x]` alertas diferenciadas para crecida, bajante y recuperacion;
 - `[x]` resumen diario opcional por Telegram a las 08:00 ART;
 - `[x]` exportacion CSV del historial;
 - `[x]` grafico con niveles oficiales de alerta a 3,00 m y evacuacion a 3,50 m;
 - `[x]` vista privada de administracion de usuarios y actividad;
 - `[x]` registro de cada alerta enviada, error y reintento.
 
-Las alertas diferenciadas siguen pendientes: el indicador estadistico se
-muestra en la web y el resumen, pero no debe confundirse con una alerta oficial.
+Las alertas estadisticas se identifican como una estimacion de Rio en Alerta y
+no se presentan como alertas oficiales del INA.
 
 ### Fuera de alcance inicial
 
@@ -394,6 +401,13 @@ firstName: string|null
 lastName: string|null
 username: string|null
 threshold: number
+alertPreferences.height: boolean
+alertPreferences.rapidRise: boolean
+alertPreferences.rapidFall: boolean
+alertPreferences.recovery: boolean
+alertState.heightCondition: "unknown"|"above"|"below"
+alertState.velocityCondition: "normal"|"rapid-rise"|"rapid-fall"
+alertState.lastObservationAt: string|null
 dailySummary: boolean
 active: boolean
 joinedAt: timestamp
@@ -404,6 +418,11 @@ lastSent: timestamp|number|null
 `chatId` es el identificador tecnico del chat y debe tratarse como dato
 personal. `username` puede ser nulo o cambiar. `joinedAt` solo se establece en
 el primer `/start`; `lastActiveAt` se actualiza en cada comando recibido.
+
+Para conservar el contrato de usuarios existentes, `height` queda activo por
+defecto y `rapidRise`, `rapidFall` y `recovery` comienzan pausados hasta que el
+usuario los habilita mediante `/avisos`. La configuracion y el estado se
+mantienen separados: cambiar una preferencia no borra el ultimo estado medido.
 
 ### Registro de actividad
 
@@ -427,6 +446,21 @@ source: INA
 
 Si el INA devuelve el mismo valor en dos consultas, se evita presentarlo como
 una medicion nueva salvo que haya cambiado `observedAt`.
+
+La web ofrece rangos de 24 horas, 7 dias, 30 dias, 3 meses, 6 meses y 12 meses.
+En 24 horas grafica cada medicion valida. En los rangos de varios dias agrupa
+por fecha calendario de Argentina y calcula la media aritmetica de las
+mediciones del dia por estacion:
+
+```text
+promedioDiario = suma(alturasValidasDelDia) / cantidadMedicionesValidasDelDia
+```
+
+El grafico usa una escala temporal y vertical comun para comparar San Fernando,
+Tigre, Dique Lujan y San Isidro. Estas tres estaciones adicionales son
+exclusivamente observadas: no modifican el nivel actual, la tendencia, las
+alertas ni el pronostico de San Fernando. La descarga CSV conserva las
+mediciones originales, sin promediar, y corresponde solo a San Fernando.
 
 ## Arquitectura
 
@@ -454,8 +488,9 @@ INA API
 
 - Firebase Cloud Functions v2, Node.js 22.
 - `telegramWebhook`: normaliza comandos, registra actividad y responde.
-- `checkRiver`: consulta INA, carga chats activos, evalua cada maxima y envia
-  alertas idempotentes.
+- `checkRiver`: consulta INA, reclama atomicamente cada timestamp observado,
+  carga chats activos, evalua la maquina de estados por usuario y envia alertas
+  idempotentes.
 - `calculateVelocityStats`: recalcula diariamente percentiles sobre 365 dias y
   guarda el resultado en `publicData/velocity`.
 - `publicRiverStatus`: publica solo el indicador agregado y calcula la
@@ -476,8 +511,10 @@ INA API
    a cero y mayores que seis metros.
 5. **Idempotencia.** El mismo update o reintento no debe duplicar suscripciones
    ni enviar alertas repetidas.
-6. **Anti-spam.** Respetar una ventana de seis horas por chat, registrar el
-   envio y manejar errores 429 de Telegram con backoff.
+6. **Anti-spam.** Procesar cada timestamp INA una vez, notificar solo al entrar
+   en un estado rapido nuevo, rearmarlo despues de una medicion normal y usar
+   10 cm de histeresis para rearmar la alerta por altura. Registrar cada envio
+   y manejar errores 429 de Telegram con backoff.
 7. **Acceso administrativo.** La consulta de usuarios debe requerir una
    identidad Firebase autorizada y nunca quedar abierta por una URL publica.
 8. **Retencion.** Eliminar chats y eventos de alertas sin actividad o con una
@@ -514,7 +551,12 @@ updatedAt: timestamp
 - las alertas se disparan solo por mediciones observadas, nunca solo por el
   pronostico;
 - Telegram ofrece botones y comandos para estado, maximo, pronostico, historial
-  y ayuda;
+  avisos y ayuda;
+- cada usuario elige por separado altura maxima, crecida rapida, bajante rapida
+  y recuperacion mediante `/avisos` y botones inline;
+- crecida rapida se dispara al alcanzar `p90Ascenso` sin depender de la altura;
+  bajante rapida usa `p90Descenso`; recuperacion requiere bajar al menos 0,10 m
+  por debajo de la altura personal;
 - GitHub Pages se mantiene como hosting publico y Firebase Hosting se usa solo
   para el panel autenticado, donde evita depender de ventanas emergentes.
 
@@ -559,14 +601,28 @@ pronostico es informativo y nunca dispara una alerta automatica.
 - con `7d` o `30d`: devuelve minima y maxima observadas para cada dia;
 - con otro argumento: no consulta el INA y muestra los rangos validos.
 
+### `/avisos`
+
+- sin argumento: muestra las cuatro preferencias individuales y sus botones;
+- cada boton alterna solo `height`, `rapidRise`, `rapidFall` o `recovery`;
+- `/pausar` y `/activar` siguen funcionando como interruptor general;
+- los usuarios existentes conservan activa la alerta por altura y deben optar
+  explicitamente por los tres avisos nuevos.
+
 ### Alerta automatica
 
 ```text
 ⚠️ Rio en Alerta
 Rio Lujan — San Fernando: 3,10 m
-Tu altura maxima: 3,00 m
-Medicion consultada: 13/08/2026 15:00 ART
+Medicion: 13/08/2026 15:00 ART
+
+Alcanzo tu altura seleccionada de 3,00 m.
 ```
+
+La misma notificacion puede agrupar varios eventos de una medicion. Crecida y
+bajante incluyen velocidad actual y p90 direccional. Recuperacion se envia solo
+si el estado anterior estaba por encima de la altura personal y la nueva
+medicion es menor o igual a `threshold - 0,10 m`.
 
 ## Pruebas y verificacion
 
@@ -581,7 +637,7 @@ Medicion consultada: 13/08/2026 15:00 ART
 - primera alta conserva defaults y datos de identidad;
 - reintento de `/start` es idempotente;
 - `lastActiveAt` se actualiza en todos los comandos;
-- ventana anti-duplicado de seis horas;
+- idempotencia por timestamp INA y transiciones de estado sin repeticiones;
 - error de INA no genera alerta falsa;
 - velocidad con intervalos irregulares y conversion entre m/h y cm/h;
 - percentil 90 con interpolacion lineal y ascensos/descensos separados;
@@ -600,6 +656,10 @@ Medicion consultada: 13/08/2026 15:00 ART
 - `checkRiver` envia solo a chats activos que superan su maxima;
 - dos chats con maximos distintos reciben decisiones independientes;
 - los errores de Telegram no rompen el procesamiento de los demas chats.
+- `/avisos` persiste preferencias independientes y procesa callbacks inline;
+- crecida y bajante rapidas se envian una sola vez por entrada al estado;
+- una medicion normal rearma la condicion estadistica;
+- recuperacion respeta la histeresis exacta de 10 cm y rearma altura;
 - `/pronostico` muestra rangos diarios y `/historial` transmite al cliente INA
   la cantidad de dias solicitada;
 - activacion y pausa de `/resumen`, envio unico por fecha y persistencia de los
@@ -704,6 +764,11 @@ metricas y la tabla de usuarios.
   Telegram verificados antes de ampliar los comandos de consulta.
 - `v1.2.0`: historial por rango, pronostico diario con minima/maxima y fixtures
   del contrato real del INA.
+- `v1.3.0`: exportacion CSV y CI protegido con pruebas de integracion.
+- `v1.4.0`: percentiles de velocidad, estaciones comparativas, resumen diario y
+  cache estadistico desplegados.
+- `v1.5.0`: historial web de hasta 12 meses, grafico multestacion, velocidades
+  estadisticas visibles y avisos Telegram configurables con maquina de estados.
 
 Este archivo debe actualizarse cada vez que cambien los comandos, los campos de
 Firestore, la fuente de datos, la frecuencia de consulta, las reglas o el

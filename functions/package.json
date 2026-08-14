@@ -9,7 +9,7 @@
     "test": "node --test test/*.test.js",
     "test:integration": "firebase emulators:exec --config ../firebase.json --project rio-en-alerta-sanfernando --only firestore \"node --test test-emulator/firestore.integration.js\"",
     "test:all": "npm test && npm run test:integration",
-    "check": "node --check index.js && node --check lib.js && node --check velocity.js && node --check bot-core.js && node --check firestore-repository.js && node --check telegram-client.js && node --experimental-default-type=module --check ../src/app.js && node --check ../src/history.mjs"
+    "check": "node --check index.js && node --check lib.js && node --check velocity.js && node --check alert-machine.js && node --check bot-core.js && node --check firestore-repository.js && node --check telegram-client.js && node --experimental-default-type=module --check ../src/app.js && node --check ../src/history.mjs"
   },
   "dependencies": {
     "firebase-admin": "13.10.0",
