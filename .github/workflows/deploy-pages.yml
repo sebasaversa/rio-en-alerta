@@ -41,7 +41,7 @@ jobs:
         run: |
           mkdir -p dist/src
           cp index.html admin.html dist/
-          cp src/app.js src/history.mjs src/styles.css src/admin.js src/admin.css src/firebase.js dist/src/
+          cp src/app.js src/history.mjs src/chart-viewport.mjs src/styles.css src/admin.js src/admin.css src/firebase.js dist/src/
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

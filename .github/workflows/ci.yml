@@ -36,7 +36,8 @@ jobs:
         run: |
           mkdir -p dist/src
           cp index.html admin.html dist/
-          cp src/app.js src/history.mjs src/styles.css src/admin.js src/admin.css src/firebase.js dist/src/
-          test "$(find dist -type f | wc -l | tr -d ' ')" = "8"
+          cp src/app.js src/history.mjs src/chart-viewport.mjs src/styles.css src/admin.js src/admin.css src/firebase.js dist/src/
+          test -e dist/src/chart-viewport.mjs
+          test "$(find dist -type f | wc -l | tr -d ' ')" = "9"
           test ! -e dist/functions
           test ! -e dist/firestore.rules
