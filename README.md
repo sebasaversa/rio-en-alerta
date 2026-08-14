@@ -11,6 +11,8 @@ suscriptores.
   en `https://rio-en-alerta-sanfernando.firebaseapp.com/admin.html`.
 - Firebase Functions ejecuta el webhook de Telegram, la revisión horaria y la
   retención de chats inactivos.
+- El cliente Telegram reintenta errores `429`, `5xx` y fallos de red con
+  `retry_after`, backoff exponencial y un presupuesto de espera acotado.
 - Firestore guarda suscripciones, actividad, estado operativo y alertas
   enviadas.
 - Firebase Authentication protege el panel administrativo.
@@ -18,10 +20,13 @@ suscriptores.
 ## Desarrollo y validación
 
 ```bash
-npm --prefix functions test
+npm --prefix functions run test:all
 npm --prefix functions run check
 git diff --check
 ```
+
+`test:all` ejecuta las pruebas unitarias y de integracion y levanta de forma
+temporal el emulador oficial de Firestore.
 
 Para servir la web localmente:
 

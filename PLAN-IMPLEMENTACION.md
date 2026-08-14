@@ -42,7 +42,7 @@ Permitir que una persona pueda:
 - `[ ]` Pendiente
 - `[!]` Bloqueado o requiere una decision
 
-Estado de referencia: 13 de agosto de 2026.
+Estado de referencia: 14 de agosto de 2026.
 
 - `[x]` Repositorio publico y GitHub Pages configurados.
 - `[x]` Proyecto Firebase separado del proyecto de padel.
@@ -69,6 +69,10 @@ Estado de referencia: 13 de agosto de 2026.
 - `[x]` Workflow publica solo el artefacto web permitido y termino en `success`.
 - `[x]` Firebase Hosting adoptado para el panel administrativo; la web publica
   permanece en GitHub Pages.
+- `[x]` Cliente Telegram con reintentos acotados para `429`, `5xx` y fallos de
+  red, respetando `retry_after` y sin reintentar errores permanentes.
+- `[x]` Pruebas de integracion del bot y adaptador Firestore ejecutadas contra
+  el emulador oficial.
 
 ## Estrategia de hosting y migracion
 
@@ -463,6 +467,12 @@ Medicion consultada: 13/08/2026 15:00 ART
 - dos chats con maximos distintos reciben decisiones independientes;
 - los errores de Telegram no rompen el procesamiento de los demas chats.
 
+La suite automatizada integra el mismo nucleo que usan las Functions con un
+repositorio controlado, y ejecuta por separado el adaptador de persistencia
+contra el emulador oficial de Firestore. Tambien cubre botones inline, errores
+del INA, `429` con `retry_after`, errores `5xx`, fallos de red, respuestas
+invalidas y errores `4xx` no reintentables.
+
 ### Verificacion de despliegue
 
 Antes de marcar una entrega como publicada:
@@ -488,6 +498,9 @@ real.
   todos los chats.
 - Registrar latencia, cantidad de chats procesados, mensajes enviados, errores y
   ultimo exito de consulta.
+- Telegram realiza hasta tres intentos dentro de un presupuesto total de espera
+  de 30 segundos. Un `retry_after` mayor se registra y se difiere a la proxima
+  ejecucion para no agotar el tiempo de la Function.
 
 ## Decisiones pendientes
 

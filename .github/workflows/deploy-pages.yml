@@ -27,11 +27,15 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: functions/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
       - name: Verify Firebase Functions
         working-directory: functions
         run: |
           npm ci
-          npm test
+          npm run test:all
           npm run check
       - name: Prepare public artifact
         run: |

@@ -6,11 +6,16 @@
   },
   "main": "index.js",
   "scripts": {
-    "test": "node --test",
-    "check": "node --check index.js && node --check lib.js"
+    "test": "node --test test/*.test.js",
+    "test:integration": "firebase emulators:exec --config ../firebase.json --project rio-en-alerta-sanfernando --only firestore \"node --test test-emulator/firestore.integration.js\"",
+    "test:all": "npm test && npm run test:integration",
+    "check": "node --check index.js && node --check lib.js && node --check bot-core.js && node --check firestore-repository.js && node --check telegram-client.js"
   },
   "dependencies": {
     "firebase-admin": "13.10.0",
     "firebase-functions": "6.6.0"
+  },
+  "devDependencies": {
+    "firebase-tools": "15.24.0"
   }
 }
