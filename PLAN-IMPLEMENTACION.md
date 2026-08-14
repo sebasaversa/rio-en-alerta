@@ -248,6 +248,9 @@ del INA. Una vez al dia se descargan hasta 365 dias observados de San Fernando
 (`siteCode=52`, `varId=2`). Se conservan los timestamps originales, se
 normalizan fechas, se descartan alturas fuera del rango fisico operativo de
 -5 a 10 m, se deduplican timestamps y se ordenan de antiguo a reciente.
+La descarga anual dispone de hasta 120 segundos dentro de una Function con
+limite total de 180 segundos; las consultas ordinarias mantienen un timeout de
+15 segundos para fallar rapido sin bloquear la interfaz ni el bot.
 
 Para cada par consecutivo valido:
 

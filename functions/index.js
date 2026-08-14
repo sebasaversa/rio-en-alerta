@@ -35,10 +35,10 @@ async function sendMessage(chatId, text, replyMarkup = MAIN_KEYBOARD) {
   });
 }
 
-async function getJson(url) {
+async function getJson(url, timeoutMs = 15000) {
   const response = await fetch(url, {
     headers: { accept: 'application/json' },
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) throw new Error(`INA respondió ${response.status}`);
   return response.json();
@@ -126,7 +126,7 @@ exports.calculateVelocityStats = onSchedule(
     memory: '512MiB',
   },
   async () => {
-    const payload = await getJson(observationUrl(new Date(), 365));
+    const payload = await getJson(observationUrl(new Date(), 365), 120000);
     const statistics = calculateVelocityStatistics(payload);
     await repository.setVelocityStatistics(statistics);
     const previous = await repository.getVelocityData();
