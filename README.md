@@ -25,6 +25,9 @@ suscriptores.
   para el pronóstico de San Fernando.
 - El gráfico histórico admite zoom horizontal con botones, rueda del mouse,
   teclado o gesto de pellizcar, y desplazamiento por arrastre.
+- La vista `Variaciones` se adapta a las alturas del período visible y agrega
+  marcas horizontales; `Niveles oficiales` conserva la referencia de 0 a 3,50 m. Un
+  cursor comparativo muestra las cuatro estaciones al pasar o tocar el gráfico.
 - El indicador de subida o bajada rápida usa percentiles direccionales del
   historial de San Fernando y se identifica expresamente como una estimación
   estadística propia, separada de los niveles oficiales. La tarjeta de tendencia

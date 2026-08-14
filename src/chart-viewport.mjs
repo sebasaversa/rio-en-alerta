@@ -4,6 +4,65 @@ function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+function timestampMs(value) {
+  if (typeof value === 'number') return value;
+  if (!value) return Number.NaN;
+  const normalized = typeof value === 'string' && !/[zZ]|[+-]\d\d:?\d\d$/.test(value)
+    ? `${value}Z`
+    : value;
+  return new Date(normalized).getTime();
+}
+
+function niceStep(value) {
+  if (!Number.isFinite(value) || value <= 0) return 0.2;
+  const exponent = Math.floor(Math.log10(value));
+  const magnitude = 10 ** exponent;
+  const fraction = value / magnitude;
+  const niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 2.5 ? 2.5 : fraction <= 5 ? 5 : 10;
+  return niceFraction * magnitude;
+}
+
+export function niceScale(values, targetIntervals = 5) {
+  const valid = values.map(Number).filter(Number.isFinite);
+  if (!valid.length) return { min: 0, max: 1, step: 0.2, ticks: [0, 0.2, 0.4, 0.6, 0.8, 1] };
+
+  let dataMin = Math.min(...valid);
+  let dataMax = Math.max(...valid);
+  if (dataMin === dataMax) {
+    const margin = Math.max(Math.abs(dataMin) * 0.1, 0.1);
+    dataMin -= margin;
+    dataMax += margin;
+  }
+  const padding = Math.max((dataMax - dataMin) * 0.12, 0.03);
+  const paddedMin = dataMin >= 0 ? Math.max(0, dataMin - padding) : dataMin - padding;
+  const paddedMax = dataMax + padding;
+  const step = niceStep((paddedMax - paddedMin) / Math.max(2, Number(targetIntervals) || 5));
+  const min = Number((Math.floor(paddedMin / step) * step).toFixed(10));
+  const max = Number((Math.ceil(paddedMax / step) * step).toFixed(10));
+  const ticks = [];
+  for (let value = min; value <= max + step / 2; value += step) {
+    ticks.push(Number(value.toFixed(10)));
+  }
+  return { min, max, step, ticks };
+}
+
+export function nearestRow(rows, targetTimestamp) {
+  const target = Number(targetTimestamp);
+  if (!Array.isArray(rows) || !rows.length || !Number.isFinite(target)) return null;
+  let nearest = null;
+  let distance = Number.POSITIVE_INFINITY;
+  for (const row of rows) {
+    const timestamp = timestampMs(row?.date);
+    if (!Number.isFinite(timestamp)) continue;
+    const candidateDistance = Math.abs(timestamp - target);
+    if (candidateDistance < distance) {
+      nearest = row;
+      distance = candidateDistance;
+    }
+  }
+  return nearest;
+}
+
 export function normalizeViewport(viewport, minimumSpan = MIN_VIEWPORT_SPAN) {
   const safeMinimum = clamp(Number(minimumSpan) || MIN_VIEWPORT_SPAN, 0.001, 1);
   const rawStart = Number(viewport?.start);

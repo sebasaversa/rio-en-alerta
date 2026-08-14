@@ -59,6 +59,9 @@ Estado de referencia: 14 de agosto de 2026.
   en el pronostico.
 - `[x]` Zoom horizontal y desplazamiento del grafico historico mediante botones,
   rueda, teclado, arrastre y gesto tactil de pellizcar.
+- `[x]` Escala vertical de detalle calculada desde el periodo visible, con
+  marcas legibles, cursor comparativo y alternativa de escala completa.
+- `[x]` Tarjetas de San Fernando sincronizadas con la ventana temporal visible.
 - `[x]` Vista movil optimizada.
 - `[x]` Seccion de alertas web eliminada; las alertas se gestionan por Telegram.
 - `[x]` Bot Telegram creado, secreto `TELEGRAM_BOT_TOKEN` guardado y webhook
@@ -464,10 +467,18 @@ exclusivamente observadas: no modifican el nivel actual, la tendencia, las
 alertas ni el pronostico de San Fernando. La descarga CSV conserva las
 mediciones originales, sin promediar, y corresponde solo a San Fernando.
 
-El zoom modifica solamente la ventana temporal visible. La escala vertical y
-las lineas oficiales de alerta y evacuacion permanecen fijas para evitar una
-interpretacion engañosa al ampliar. La vista puede restablecerse en cualquier
-momento y los extremos del eje temporal se actualizan con el periodo visible.
+El zoom modifica la ventana temporal visible y actualiza sus extremos. La vista
+puede restablecerse en cualquier momento. El modo de escala elegido se informa
+siempre para evitar confundir una ampliacion visual con un cambio de altura.
+
+La interfaz ofrece dos modos verticales. `Variaciones` calcula limites redondeados
+y entre cinco y seis marcas a partir de las mediciones visibles; si los niveles
+oficiales quedan fuera de esa ventana, lo informa expresamente. `Niveles oficiales`
+vuelve a la referencia de 0 a 3,50 m y dibuja alerta y evacuacion. Al pasar el
+cursor o tocar el grafico se muestran fecha y alturas cercanas de las cuatro
+estaciones, sin inventar valores cuando una estacion no tiene una medicion en
+el periodo visible. Las tarjetas inferiores siempre pertenecen a la ventana
+temporal seleccionada.
 
 ## Arquitectura
 

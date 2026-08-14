@@ -1,5 +1,5 @@
 import { buildHistoryCsv, historyChartRows, historyCsvFilename } from "./history.mjs";
-import { MIN_VIEWPORT_SPAN, isFullViewport, normalizeViewport, panViewport, viewportTimestamps, zoomViewport } from "./chart-viewport.mjs";
+import { MIN_VIEWPORT_SPAN, isFullViewport, nearestRow, niceScale, normalizeViewport, panViewport, viewportTimestamps, zoomViewport } from "./chart-viewport.mjs";
 
 const API_BASE = "https://alerta.ina.gob.ar/pub/datos";
 const PUBLIC_STATUS_URL = "https://us-central1-rio-en-alerta-sanfernando.cloudfunctions.net/publicRiverStatus";
@@ -31,6 +31,7 @@ const elements = {
   forecastGrid: document.querySelector("#forecast-grid"),
   historyRange: document.querySelector("#history-range"), historyDownload: document.querySelector("#history-download"), historyChart: document.querySelector("#history-chart"), historyLegend: document.querySelector("#history-legend"), historyList: document.querySelector("#history-list"), historySummary: document.querySelector("#history-summary"),
   historyZoomIn: document.querySelector("#history-zoom-in"), historyZoomOut: document.querySelector("#history-zoom-out"), historyZoomReset: document.querySelector("#history-zoom-reset"), historyZoomStatus: document.querySelector("#history-zoom-status"),
+  historyScaleDetail: document.querySelector("#history-scale-detail"), historyScaleFull: document.querySelector("#history-scale-full"), historyScaleNote: document.querySelector("#history-scale-note"), historyTooltip: document.querySelector("#history-chart-tooltip"), historyListTitle: document.querySelector("#history-list-title"),
 };
 
 let thresholds = { alert: 3, evacuation: 3.5 };
@@ -39,6 +40,7 @@ let historyDownloadUrl = null;
 let historyRequestId = 0;
 let historyChartModel = null;
 let historyViewport = { start: 0, end: 1 };
+let historyScaleMode = "detail";
 const historyPointers = new Map();
 let historyGesture = null;
 
@@ -290,6 +292,42 @@ function updateHistoryZoomControls() {
   elements.historyZoomStatus.textContent = `Mostrando ${historyStamp(visible.start, historyChartModel.days)} – ${historyStamp(visible.end, historyChartModel.days)}`;
 }
 
+function completeHistoryScale(minimum, maximum) {
+  const min = Number(minimum);
+  const max = Number(maximum);
+  const step = max - min <= 4 ? 0.5 : 1;
+  const ticks = [];
+  for (let value = Math.ceil(min / step) * step; value <= max + step / 2; value += step) {
+    ticks.push(Number(value.toFixed(10)));
+  }
+  return { min, max, step, ticks };
+}
+
+function historyCompact(row, days) {
+  const options = days === 1
+    ? { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" }
+    : { day: "numeric", month: "short", year: "numeric", timeZone: "America/Argentina/Buenos_Aires" };
+  return new Intl.DateTimeFormat("es-AR", options).format(asDate(row.date)).replace(",", " ·");
+}
+
+function clearHistoryTooltip() {
+  elements.historyTooltip.hidden = true;
+  elements.historyTooltip.innerHTML = "";
+  elements.historyChart.querySelector("#history-crosshair")?.replaceChildren();
+}
+
+function renderVisibleHistoryList(visible) {
+  const { mainSeries, days } = historyChartModel;
+  const rows = mainSeries.chartRows.filter((row) => {
+    const timestamp = asDate(row.date).getTime();
+    return timestamp >= visible.start && timestamp <= visible.end;
+  }).slice(-4);
+  elements.historyListTitle.textContent = "San Fernando · valores más recientes del período visible";
+  elements.historyList.innerHTML = rows.length
+    ? rows.map((row) => `<div class="history-item">${historyCompact(row, days)}<strong>${formatLevel(row.value)} m</strong>${row.samples ? `<small>Promedio de ${row.samples} mediciones</small>` : ""}</div>`).join("")
+    : `<p class="form-message">No hay mediciones de San Fernando dentro de este período.</p>`;
+}
+
 function renderHistoryChart() {
   if (!historyChartModel) {
     updateHistoryZoomControls();
@@ -299,16 +337,24 @@ function renderHistoryChart() {
   const { availableSeries, scaleMin, scaleMax, days, firstTimestamp, lastTimestamp } = historyChartModel;
   const visible = viewportTimestamps(firstTimestamp, lastTimestamp, historyViewport);
   const visibleTimeSpan = visible.end - visible.start || 1;
-  const valueSpan = scaleMax - scaleMin || 1;
   const plotWidth = HISTORY_PLOT.right - HISTORY_PLOT.left;
   const plotHeight = HISTORY_PLOT.bottom - HISTORY_PLOT.top;
-  const x = (date) => (asDate(date).getTime() - visible.start) / visibleTimeSpan * plotWidth + HISTORY_PLOT.left;
-  const y = (value) => HISTORY_PLOT.bottom - (value - scaleMin) / valueSpan * plotHeight;
   const visibleRows = availableSeries.flatMap((item) => item.chartRows.filter((row) => {
     const timestamp = asDate(row.date).getTime();
     return timestamp >= visible.start && timestamp <= visible.end;
   }));
+  const scale = historyScaleMode === "detail"
+    ? niceScale(visibleRows.map((row) => row.value))
+    : completeHistoryScale(scaleMin, scaleMax);
+  const valueSpan = scale.max - scale.min || 1;
+  const x = (date) => (asDate(date).getTime() - visible.start) / visibleTimeSpan * plotWidth + HISTORY_PLOT.left;
+  const y = (value) => HISTORY_PLOT.bottom - (value - scale.min) / valueSpan * plotHeight;
   const showPoints = visibleRows.length <= 160;
+  const gridMarkup = scale.ticks.map((value) => `<line class="history-grid-line" x1="${HISTORY_PLOT.left}" y1="${y(value)}" x2="${HISTORY_PLOT.right}" y2="${y(value)}"/><text class="history-axis-label" text-anchor="end" x="54" y="${y(value) + 4}">${formatLevel(value)} m</text>`).join("");
+  const thresholdMarkup = [
+    { value: thresholds.evacuation, className: "threshold-evacuation", label: "Evacuación 3,50 m" },
+    { value: thresholds.alert, className: "threshold-alert", label: "Alerta 3,00 m" },
+  ].filter((threshold) => threshold.value >= scale.min && threshold.value <= scale.max).map((threshold) => `<line class="threshold-line ${threshold.className}" x1="${HISTORY_PLOT.left}" y1="${y(threshold.value)}" x2="${HISTORY_PLOT.right}" y2="${y(threshold.value)}"/><text class="threshold-label" text-anchor="end" x="688" y="${y(threshold.value) - 4}">${threshold.label}</text>`).join("");
   const seriesMarkup = availableSeries.map((item) => {
     const points = item.chartRows.map((row) => `${x(row.date)},${y(row.value)}`).join(" ");
     const circles = showPoints ? item.chartRows.filter((row) => {
@@ -318,12 +364,56 @@ function renderHistoryChart() {
     return `<polyline class="history-series" style="stroke:${item.color}" points="${points}"><title>${item.name}</title></polyline>${circles}`;
   }).join("");
 
-  elements.historyChart.innerHTML = `<defs><clipPath id="history-plot-clip"><rect x="${HISTORY_PLOT.left}" y="${HISTORY_PLOT.top - 5}" width="${plotWidth}" height="${plotHeight + 10}"/></clipPath></defs><line x1="${HISTORY_PLOT.left}" y1="${HISTORY_PLOT.bottom}" x2="${HISTORY_PLOT.right}" y2="${HISTORY_PLOT.bottom}"/><line x1="${HISTORY_PLOT.left}" y1="${HISTORY_PLOT.top}" x2="${HISTORY_PLOT.left}" y2="${HISTORY_PLOT.bottom}"/><text x="4" y="45">${formatLevel(scaleMax)} m</text><text x="4" y="${HISTORY_PLOT.bottom}">${formatLevel(scaleMin)} m</text><line class="threshold-line threshold-evacuation" x1="${HISTORY_PLOT.left}" y1="${y(thresholds.evacuation)}" x2="${HISTORY_PLOT.right}" y2="${y(thresholds.evacuation)}"/><text class="threshold-label" text-anchor="end" x="688" y="${y(thresholds.evacuation) - 4}">Evacuación 3,50 m</text><line class="threshold-line threshold-alert" x1="${HISTORY_PLOT.left}" y1="${y(thresholds.alert)}" x2="${HISTORY_PLOT.right}" y2="${y(thresholds.alert)}"/><text class="threshold-label" text-anchor="end" x="688" y="${y(thresholds.alert) - 4}">Alerta 3,00 m</text><g clip-path="url(#history-plot-clip)">${seriesMarkup}</g><text x="${HISTORY_PLOT.left}" y="187">${historyStamp(visible.start, days)}</text><text text-anchor="end" x="${HISTORY_PLOT.right}" y="187">${historyStamp(visible.end, days)}</text>`;
+  elements.historyChart.innerHTML = `<defs><clipPath id="history-plot-clip"><rect x="${HISTORY_PLOT.left}" y="${HISTORY_PLOT.top - 5}" width="${plotWidth}" height="${plotHeight + 10}"/></clipPath></defs>${gridMarkup}<line x1="${HISTORY_PLOT.left}" y1="${HISTORY_PLOT.top}" x2="${HISTORY_PLOT.left}" y2="${HISTORY_PLOT.bottom}"/>${thresholdMarkup}<g clip-path="url(#history-plot-clip)">${seriesMarkup}<g id="history-crosshair"></g></g><text x="${HISTORY_PLOT.left}" y="187">${historyStamp(visible.start, days)}</text><text text-anchor="end" x="${HISTORY_PLOT.right}" y="187">${historyStamp(visible.end, days)}</text>`;
   elements.historyChart.setAttribute("aria-label", `Comparación histórica de alturas observadas. Período visible: ${historyStamp(visible.start, days)} a ${historyStamp(visible.end, days)}.`);
+  historyChartModel.renderState = { visible, scale, x, y };
+  elements.historyScaleDetail.classList.toggle("is-active", historyScaleMode === "detail");
+  elements.historyScaleFull.classList.toggle("is-active", historyScaleMode === "full");
+  elements.historyScaleDetail.setAttribute("aria-pressed", String(historyScaleMode === "detail"));
+  elements.historyScaleFull.setAttribute("aria-pressed", String(historyScaleMode === "full"));
+  const hiddenThresholds = [thresholds.alert, thresholds.evacuation].filter((value) => value > scale.max || value < scale.min);
+  elements.historyScaleNote.textContent = historyScaleMode === "detail" && hiddenThresholds.length
+    ? `Variaciones: amplía las diferencias entre ${formatLevel(scale.min)} y ${formatLevel(scale.max)} m. Elegí “Niveles oficiales” para ver alerta y evacuación.`
+    : historyScaleMode === "detail"
+      ? `Variaciones: escala ajustada entre ${formatLevel(scale.min)} y ${formatLevel(scale.max)} m.`
+      : `Niveles oficiales: escala completa entre ${formatLevel(scale.min)} y ${formatLevel(scale.max)} m.`;
+  renderVisibleHistoryList(visible);
+  clearHistoryTooltip();
   updateHistoryZoomControls();
 }
 
+function showHistoryTooltip(clientX) {
+  if (!historyChartModel?.renderState) return;
+  const { availableSeries, days, renderState } = historyChartModel;
+  const { visible, scale, x, y } = renderState;
+  const targetTimestamp = visible.start + historyChartAnchor(clientX) * (visible.end - visible.start);
+  const visibleRows = availableSeries.flatMap((item) => item.chartRows.filter((row) => {
+    const timestamp = asDate(row.date).getTime();
+    return timestamp >= visible.start && timestamp <= visible.end;
+  }));
+  const selected = nearestRow(visibleRows, targetTimestamp);
+  if (!selected) return clearHistoryTooltip();
+  const selectedTimestamp = asDate(selected.date).getTime();
+  const values = availableSeries.map((item) => {
+    const row = nearestRow(item.chartRows, selectedTimestamp);
+    const timestamp = row ? asDate(row.date).getTime() : Number.NaN;
+    return { item, row: timestamp >= visible.start && timestamp <= visible.end ? row : null, timestamp };
+  });
+  const crosshairX = x(selected.date);
+  const points = values.filter(({ row }) => row && row.value >= scale.min && row.value <= scale.max).map(({ item, row }) => `<circle class="history-crosshair-point" style="fill:${item.color}" cx="${x(row.date)}" cy="${y(row.value)}" r="5"/>`).join("");
+  const crosshair = elements.historyChart.querySelector("#history-crosshair");
+  if (crosshair) crosshair.innerHTML = `<line class="history-crosshair-line" x1="${crosshairX}" y1="${HISTORY_PLOT.top}" x2="${crosshairX}" y2="${HISTORY_PLOT.bottom}"/>${points}`;
+  const dateLabel = days === 1 ? formatDate(selected.date) : historyCompact(selected, days);
+  elements.historyTooltip.innerHTML = `<strong>${dateLabel}</strong>${values.map(({ item, row }) => `<div class="history-tooltip-row"><i style="background:${item.color}"></i><span>${item.name}</span><b>${row ? `${formatLevel(row.value)} m` : "—"}</b></div>`).join("")}`;
+  const frameBounds = elements.historyTooltip.parentElement.getBoundingClientRect();
+  const halfWidth = Math.min(110, frameBounds.width / 2);
+  const relativeX = Math.min(frameBounds.width - halfWidth, Math.max(halfWidth, clientX - frameBounds.left));
+  elements.historyTooltip.style.left = `${relativeX}px`;
+  elements.historyTooltip.hidden = false;
+}
+
 function setHistoryViewport(nextViewport) {
+  clearHistoryTooltip();
   historyViewport = normalizeViewport(nextViewport);
   renderHistoryChart();
 }
@@ -341,12 +431,14 @@ function historyPlotPixelWidth() {
 
 function beginHistoryPointer(event) {
   if (!historyChartModel || (event.pointerType === "mouse" && event.button !== 0)) return;
+  showHistoryTooltip(event.clientX);
   elements.historyChart.setPointerCapture?.(event.pointerId);
   historyPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   elements.historyChart.classList.add("is-dragging");
   if (historyPointers.size === 1) {
-    historyGesture = { kind: "pan", startX: event.clientX, viewport: { ...historyViewport } };
+    historyGesture = { kind: "pan", startX: event.clientX, startY: event.clientY, moved: false, viewport: { ...historyViewport } };
   } else if (historyPointers.size === 2) {
+    clearHistoryTooltip();
     const points = [...historyPointers.values()];
     historyGesture = {
       kind: "pinch",
@@ -358,7 +450,11 @@ function beginHistoryPointer(event) {
 }
 
 function moveHistoryPointer(event) {
-  if (!historyPointers.has(event.pointerId) || !historyChartModel) return;
+  if (!historyChartModel) return;
+  if (!historyPointers.has(event.pointerId)) {
+    showHistoryTooltip(event.clientX);
+    return;
+  }
   historyPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (historyPointers.size >= 2) {
     const points = [...historyPointers.values()].slice(0, 2);
@@ -376,6 +472,7 @@ function moveHistoryPointer(event) {
     return;
   }
   if (historyGesture?.kind === "pan") {
+    historyGesture.moved = historyGesture.moved || Math.hypot(event.clientX - historyGesture.startX, event.clientY - historyGesture.startY) > 4;
     const span = historyGesture.viewport.end - historyGesture.viewport.start;
     const delta = -(event.clientX - historyGesture.startX) / historyPlotPixelWidth() * span;
     setHistoryViewport(panViewport(historyGesture.viewport, delta));
@@ -383,13 +480,15 @@ function moveHistoryPointer(event) {
 }
 
 function endHistoryPointer(event) {
+  const finishedGesture = historyGesture;
   historyPointers.delete(event.pointerId);
   if (historyPointers.size === 1) {
     const remaining = [...historyPointers.values()][0];
-    historyGesture = { kind: "pan", startX: remaining.x, viewport: { ...historyViewport } };
+    historyGesture = { kind: "pan", startX: remaining.x, startY: remaining.y, moved: false, viewport: { ...historyViewport } };
   } else if (!historyPointers.size) {
     historyGesture = null;
     elements.historyChart.classList.remove("is-dragging");
+    if (finishedGesture?.kind === "pan") showHistoryTooltip(event.clientX);
   }
 }
 
@@ -406,6 +505,8 @@ async function loadHistory() {
   elements.historySummary.textContent = "Cargando historial y estaciones comparativas…";
   elements.historyLegend.innerHTML = "";
   elements.historyChart.innerHTML = "";
+  clearHistoryTooltip();
+  elements.historyScaleNote.textContent = "";
   elements.historyList.innerHTML = "";
   updateHistoryZoomControls();
   try {
@@ -439,14 +540,12 @@ async function loadHistory() {
     const scaleMax = Math.max(thresholds.evacuation, ...chartValues);
     const firstTimestamp = Math.min(...chartRows.map((row) => asDate(row.date).getTime()));
     const lastTimestamp = Math.max(...chartRows.map((row) => asDate(row.date).getTime()));
-    const compact = (row) => new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" }).format(asDate(row.date)).replace(",", " ·");
-    historyChartModel = { availableSeries, scaleMin, scaleMax, days, firstTimestamp, lastTimestamp };
+    historyChartModel = { availableSeries, mainSeries, scaleMin, scaleMax, days, firstTimestamp, lastTimestamp };
     historyViewport = { start: 0, end: 1 };
     renderHistoryChart();
     elements.historyLegend.innerHTML = availableSeries.map((item) => `<span class="history-legend-item"><i style="background:${item.color}"></i>${item.name}</span>`).join("");
     const resolution = days === 1 ? "mediciones horarias" : "promedios diarios";
     elements.historySummary.textContent = `San Fernando: ${mainSeries.rows.length} mediciones · mínimo ${formatLevel(min)} m · máximo ${formatLevel(max)} m. Gráfico con ${resolution} de ${availableSeries.length} estaciones.`;
-    elements.historyList.innerHTML = mainSeries.rows.slice(-4).map((row) => `<div class="history-item">${compact(row)}<strong>${formatLevel(row.value)} m</strong></div>`).join("");
   } catch (error) {
     if (requestId !== historyRequestId) return;
     elements.historySummary.textContent = "No se pudo cargar el historial.";
@@ -454,6 +553,8 @@ async function loadHistory() {
     historyViewport = { start: 0, end: 1 };
     elements.historyLegend.innerHTML = "";
     elements.historyChart.innerHTML = "";
+    clearHistoryTooltip();
+    elements.historyScaleNote.textContent = "";
     elements.historyList.innerHTML = "";
     updateHistoryZoomControls();
     console.error(error);
@@ -465,6 +566,14 @@ elements.historyRange.addEventListener("change", loadHistory);
 elements.historyZoomIn.addEventListener("click", () => setHistoryViewport(zoomViewport(historyViewport, 1.6, 0.5)));
 elements.historyZoomOut.addEventListener("click", () => setHistoryViewport(zoomViewport(historyViewport, 1 / 1.6, 0.5)));
 elements.historyZoomReset.addEventListener("click", () => setHistoryViewport({ start: 0, end: 1 }));
+elements.historyScaleDetail.addEventListener("click", () => {
+  historyScaleMode = "detail";
+  renderHistoryChart();
+});
+elements.historyScaleFull.addEventListener("click", () => {
+  historyScaleMode = "full";
+  renderHistoryChart();
+});
 elements.historyChart.addEventListener("wheel", (event) => {
   if (!historyChartModel) return;
   event.preventDefault();
@@ -475,6 +584,9 @@ elements.historyChart.addEventListener("pointerdown", beginHistoryPointer);
 elements.historyChart.addEventListener("pointermove", moveHistoryPointer);
 elements.historyChart.addEventListener("pointerup", endHistoryPointer);
 elements.historyChart.addEventListener("pointercancel", endHistoryPointer);
+elements.historyChart.addEventListener("pointerleave", (event) => {
+  if (event.pointerType === "mouse" && !historyPointers.size) clearHistoryTooltip();
+});
 elements.historyChart.addEventListener("keydown", (event) => {
   if (!historyChartModel) return;
   const span = historyViewport.end - historyViewport.start;
