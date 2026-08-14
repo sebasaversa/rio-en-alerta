@@ -1,6 +1,7 @@
 const {
   STATION,
-  dailyMaximums,
+  dailyRanges,
+  historyRangeDays,
   normalizeCommand,
   normalizeRows,
   parseDate,
@@ -28,8 +29,10 @@ const HELP_TEXT = [
   '• /estado — consultar la altura actual',
   '• /maximo — ver tu altura máxima',
   '• /maximo 2.50 — cambiar tu altura máxima',
-  '• /pronostico — ver los próximos días',
-  '• /historial — ver las últimas mediciones',
+  '• /pronostico — ver mínimas y máximas previstas',
+  '• /historial 24h — ver las últimas 24 horas',
+  '• /historial 7d — resumir los últimos 7 días',
+  '• /historial 30d — resumir los últimos 30 días',
   '• /pausar — pausar las alertas',
   '• /activar — volver a activarlas',
   '• /ayuda — volver a ver este mensaje',
@@ -62,11 +65,12 @@ function formatLevel(value) {
 function formatDate(value, options = {}) {
   const date = value instanceof Date ? value : parseDate(value);
   if (!date) return 'fecha no disponible';
-  return new Intl.DateTimeFormat('es-AR', {
+  const formatOptions = {
     dateStyle: options.dateStyle ?? 'short',
-    timeStyle: options.timeStyle ?? 'short',
     timeZone: 'America/Argentina/Buenos_Aires',
-  }).format(date);
+  };
+  if (options.timeStyle !== null) formatOptions.timeStyle = options.timeStyle ?? 'short';
+  return new Intl.DateTimeFormat('es-AR', formatOptions).format(date);
 }
 
 function createBotCore(options) {
@@ -111,7 +115,7 @@ function createBotCore(options) {
   }
 
   async function commandPronostico(chatId) {
-    const days = dailyMaximums(await getForecast());
+    const days = dailyRanges(await getForecast(), 5);
     if (!days.length) {
       await sendMessage(chatId, 'El pronóstico del INA no está disponible en este momento.', MAIN_KEYBOARD);
       return;
@@ -120,20 +124,33 @@ function createBotCore(options) {
       const day = new Intl.DateTimeFormat('es-AR', {
         weekday: 'short', day: 'numeric', month: 'short', timeZone: 'America/Argentina/Buenos_Aires',
       }).format(parseDate(row.date));
-      return `• ${day}: *${formatLevel(row.value)} m*`;
+      return `• ${day}: mín. *${formatLevel(row.min)} m* · máx. *${formatLevel(row.max)} m*`;
     });
-    await sendMessage(chatId, [`🔭 *Pronóstico — ${STATION.name}*`, ...rows, '', '_Máximos diarios estimados por el INA._'].join('\n'), MAIN_KEYBOARD);
+    await sendMessage(chatId, [`🔭 *Pronóstico — ${STATION.name}*`, ...rows, '', '_Rango diario de los valores publicados por el INA._'].join('\n'), MAIN_KEYBOARD);
   }
 
-  async function commandHistorial(chatId) {
-    const rows = normalizeRows(await getHistory()).slice(-6);
+  async function commandHistorial(chatId, argument) {
+    const days = historyRangeDays(argument);
+    if (days === null) {
+      await sendMessage(chatId, 'Elegí uno de estos rangos:\n/historial 24h\n/historial 7d\n/historial 30d', MAIN_KEYBOARD);
+      return;
+    }
+    const rows = normalizeRows(await getHistory(days));
     if (!rows.length) {
       await sendMessage(chatId, 'El historial del INA no está disponible en este momento.', MAIN_KEYBOARD);
       return;
     }
+    if (days > 1) {
+      const ranges = dailyRanges(rows, days, { latest: true });
+      await sendMessage(chatId, [
+        `📈 *Historial de ${days} días — ${STATION.name}*`,
+        ...ranges.map((row) => `• ${formatDate(row.date, { dateStyle: 'short', timeStyle: null })}: mín. *${formatLevel(row.min)} m* · máx. *${formatLevel(row.max)} m*`),
+      ].join('\n'), MAIN_KEYBOARD);
+      return;
+    }
     await sendMessage(chatId, [
-      `📈 *Últimas mediciones — ${STATION.name}*`,
-      ...rows.map((row) => `• ${formatDate(row.date)}: *${formatLevel(row.value)} m*`),
+      `📈 *Últimas 24 horas — ${STATION.name}*`,
+      ...rows.slice(-8).map((row) => `• ${formatDate(row.date)}: *${formatLevel(row.value)} m*`),
     ].join('\n'), MAIN_KEYBOARD);
   }
 
@@ -162,7 +179,7 @@ function createBotCore(options) {
         await commandPronostico(chatId);
         break;
       case '/historial':
-        await commandHistorial(chatId);
+        await commandHistorial(chatId, argument);
         break;
       case '/pausar':
         await repository.setActive(chatId, false);

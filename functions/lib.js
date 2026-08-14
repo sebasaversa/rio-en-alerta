@@ -54,7 +54,9 @@ function parseDate(value) {
 }
 
 function normalizeRows(payload) {
-  const source = payload?.data ?? payload?.values ?? payload ?? [];
+  const source = Array.isArray(payload)
+    ? payload
+    : payload?.data ?? payload?.values ?? [];
   if (!Array.isArray(source)) return [];
   return source
     .flatMap((row) => row?.pronosticos ?? row?.values ?? [row])
@@ -81,6 +83,33 @@ function dailyMaximums(payload, limit = 5) {
     if (!current || row.value > current.value) grouped.set(key, row);
   }
   return [...grouped.values()].slice(0, limit);
+}
+
+function dailyRanges(payload, limit = 30, { latest = false } = {}) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+  });
+  const grouped = new Map();
+  for (const row of normalizeRows(payload)) {
+    const key = formatter.format(parseDate(row.date));
+    const current = grouped.get(key);
+    if (!current) {
+      grouped.set(key, { date: row.date, min: row.value, max: row.value });
+      continue;
+    }
+    current.min = Math.min(current.min, row.value);
+    current.max = Math.max(current.max, row.value);
+  }
+  const ranges = [...grouped.values()];
+  return latest ? ranges.slice(-limit) : ranges.slice(0, limit);
+}
+
+function historyRangeDays(argument = '') {
+  const normalized = String(argument).trim().toLowerCase();
+  if (!normalized || normalized === '24h' || normalized === '1d') return 1;
+  if (normalized === '7d') return 7;
+  if (normalized === '30d') return 30;
+  return null;
 }
 
 function normalizeCommand(text = '') {
@@ -112,7 +141,9 @@ module.exports = {
   STATION,
   currentObservation,
   dailyMaximums,
+  dailyRanges,
   forecastUrl,
+  historyRangeDays,
   normalizeCommand,
   normalizeRows,
   observationUrl,

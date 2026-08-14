@@ -59,7 +59,7 @@ const bot = createBotCore({
   }),
   getCurrentObservation,
   getForecast: () => getJson(forecastUrl()),
-  getHistory: () => getJson(observationUrl(new Date(), 1)),
+  getHistory: (days) => getJson(observationUrl(new Date(), days)),
   logger,
 });
 
