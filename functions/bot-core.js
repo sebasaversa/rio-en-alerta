@@ -16,6 +16,7 @@ const COMMANDS = [
   { command: 'maximo', description: 'Ver o cambiar tu altura máxima' },
   { command: 'pronostico', description: 'Ver los próximos días' },
   { command: 'historial', description: 'Ver las últimas mediciones' },
+  { command: 'resumen', description: 'Configurar el resumen de las 08:00' },
   { command: 'pausar', description: 'Pausar alertas automáticas' },
   { command: 'activar', description: 'Activar alertas automáticas' },
   { command: 'ayuda', description: 'Mostrar esta ayuda' },
@@ -33,6 +34,9 @@ const HELP_TEXT = [
   '• /historial 24h — ver las últimas 24 horas',
   '• /historial 7d — resumir los últimos 7 días',
   '• /historial 30d — resumir los últimos 30 días',
+  '• /resumen — ver el estado del resumen diario',
+  '• /resumen activar — recibirlo todos los días a las 08:00',
+  '• /resumen pausar — dejar de recibirlo',
   '• /pausar — pausar las alertas',
   '• /activar — volver a activarlas',
   '• /ayuda — volver a ver este mensaje',
@@ -51,7 +55,10 @@ const MAIN_KEYBOARD = {
       { text: '🔭 Pronóstico', callback_data: 'cmd:pronostico' },
       { text: '📈 Historial', callback_data: 'cmd:historial' },
     ],
-    [{ text: 'ℹ️ Ayuda', callback_data: 'cmd:ayuda' }],
+    [
+      { text: '🌅 Resumen diario', callback_data: 'cmd:resumen' },
+      { text: 'ℹ️ Ayuda', callback_data: 'cmd:ayuda' },
+    ],
   ],
 };
 
@@ -60,6 +67,14 @@ function formatLevel(value) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function formatSigned(value, digits = 2) {
+  const formatted = Math.abs(Number(value)).toLocaleString('es-AR', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+  return `${Number(value) > 0 ? '+' : Number(value) < 0 ? '−' : ''}${formatted}`;
 }
 
 function formatDate(value, options = {}) {
@@ -154,6 +169,32 @@ function createBotCore(options) {
     ].join('\n'), MAIN_KEYBOARD);
   }
 
+  async function commandResumen(chatId, argument) {
+    const data = await repository.getChat(chatId);
+    if (!data?.joinedAt) {
+      await sendMessage(chatId, 'Primero enviá /start para configurar el resumen diario.', MAIN_KEYBOARD);
+      return;
+    }
+    const action = argument.trim().toLowerCase();
+    if (!action) {
+      await sendMessage(chatId, data.dailySummary
+        ? '🌅 Tu resumen diario está *activo* y llega a las *08:00 ART*.'
+        : '🌅 Tu resumen diario está *pausado*.\nPodés activarlo con /resumen activar.', MAIN_KEYBOARD);
+      return;
+    }
+    if (action === 'activar') {
+      await repository.setDailySummary(chatId, true);
+      await sendMessage(chatId, '✅ Vas a recibir el resumen diario a las *08:00 ART*.', MAIN_KEYBOARD);
+      return;
+    }
+    if (action === 'pausar' || action === 'desactivar') {
+      await repository.setDailySummary(chatId, false);
+      await sendMessage(chatId, '⏸️ El resumen diario quedó pausado. Tus alertas por altura no cambian.', MAIN_KEYBOARD);
+      return;
+    }
+    await sendMessage(chatId, 'Usá /resumen activar o /resumen pausar.', MAIN_KEYBOARD);
+  }
+
   async function processCommand(chatId, chat, text) {
     const { command, argument } = normalizeCommand(text);
     const isStart = command === '/start';
@@ -180,6 +221,9 @@ function createBotCore(options) {
         break;
       case '/historial':
         await commandHistorial(chatId, argument);
+        break;
+      case '/resumen':
+        await commandResumen(chatId, argument);
         break;
       case '/pausar':
         await repository.setActive(chatId, false);
@@ -226,13 +270,13 @@ function createBotCore(options) {
     }
   }
 
-  async function checkRiver() {
+  async function checkRiver(currentOverride = null) {
     const startedAt = now();
     let chatsProcessed = 0;
     let alertsSent = 0;
     let errors = 0;
     try {
-      const current = await getCurrentObservation();
+      const current = currentOverride ?? await getCurrentObservation();
       const chats = await repository.listActiveChats();
       for (const chat of chats) {
         chatsProcessed += 1;
@@ -275,7 +319,44 @@ function createBotCore(options) {
     }
   }
 
-  return { checkRiver, processCommand, processUpdate };
+  async function sendDailySummaries({ current, dateKey, velocityData }) {
+    const chats = await repository.listDailySummaryChats();
+    let sent = 0;
+    let skipped = 0;
+    let errors = 0;
+    for (const chat of chats) {
+      const claimed = await repository.claimDailySummary(chat.chatId, dateKey);
+      if (!claimed) {
+        skipped += 1;
+        continue;
+      }
+      const velocity = velocityData?.statistics?.sufficient ? velocityData.current : null;
+      const trend = velocity?.speedMetersPerHour == null
+        ? 'Tendencia estadística: datos insuficientes.'
+        : `Tendencia: *${velocity.label}* (${formatSigned(velocity.speedMetersPerHour)} m/h; ${formatSigned(velocity.speedCentimetersPerHour, 1)} cm/h).`;
+      try {
+        await sendMessage(chat.chatId, [
+          `🌅 *Resumen diario de las 08:00 — ${STATION.name}*`,
+          `${STATION.river}: *${formatLevel(current.value)} m*`,
+          `Medición: ${formatDate(current.date)} ART`,
+          trend,
+          `Tu altura máxima: *${formatLevel(chat.threshold)} m*`,
+          'Niveles oficiales: alerta 3,00 m · evacuación 3,50 m.',
+          '',
+          '_El indicador de velocidad es una estimación estadística de Río en Alerta, no una alerta oficial._',
+          `📊 ${WEB_URL}`,
+        ].join('\n'), MAIN_KEYBOARD);
+        sent += 1;
+      } catch (error) {
+        errors += 1;
+        logger.error('Falló un resumen diario', { chatId: String(chat.id), error: error.message });
+      }
+    }
+    logger.info('Resumen diario completado', { chats: chats.length, sent, skipped, errors });
+    return { chats: chats.length, sent, skipped, errors };
+  }
+
+  return { checkRiver, processCommand, processUpdate, sendDailySummaries };
 }
 
 module.exports = {

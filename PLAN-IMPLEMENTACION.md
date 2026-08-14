@@ -83,6 +83,11 @@ Estado de referencia: 14 de agosto de 2026.
   red, respetando `retry_after` y sin reintentar errores permanentes.
 - `[x]` Pruebas de integracion del bot y adaptador Firestore ejecutadas contra
   el emulador oficial.
+- `[x]` Comparacion observada de Tigre, Dique Lujan y San Isidro, sin usar esas
+  estaciones para el pronostico.
+- `[x]` Indicador estadistico de velocidad por percentil 90 para San Fernando.
+- `[x]` Resumen diario opcional por Telegram a las 08:00 ART.
+- `[x]` Grafico historico con niveles oficiales de alerta y evacuacion.
 
 ## Estrategia de hosting y migracion
 
@@ -224,6 +229,57 @@ Consulta de pronostico calibrado:
 /datosProno&timeStart=YYYY-MM-DD&timeEnd=YYYY-MM-DD&seriesId=26202&calId=432&siteCode=52&varId=2&all=false&format=json
 ```
 
+Estaciones comparativas observadas:
+
+```text
+siteCode=49  Tigre         Rio Lujan
+siteCode=50  Dique Lujan   Rio Lujan
+siteCode=53  San Isidro    Rio de la Plata
+varId=2      Altura en metros
+```
+
+Estas estaciones se consultan exclusivamente mediante `datos`. No alimentan
+`datosProno`, no corrigen el pronostico de San Fernando y no disparan alertas.
+
+### Indicador estadistico de velocidad
+
+El indicador es una estimacion propia de Rio en Alerta, no una alerta oficial
+del INA. Una vez al dia se descargan hasta 365 dias observados de San Fernando
+(`siteCode=52`, `varId=2`). Se conservan los timestamps originales, se
+normalizan fechas, se descartan alturas fuera del rango fisico operativo de
+-5 a 10 m, se deduplican timestamps y se ordenan de antiguo a reciente.
+
+Para cada par consecutivo valido:
+
+```text
+horas = (timestamp_actual - timestamp_anterior) / 3.600.000
+variacion_m = altura_actual - altura_anterior
+velocidad_m_h = variacion_m / horas
+```
+
+Se excluyen fechas o alturas invalidas, tiempos no positivos, intervalos
+mayores a seis horas, alturas fisicamente invalidas y la misma observacion
+recibida en revisiones sucesivas. Los ascensos y descensos se procesan por
+separado: `p90Ascenso` usa velocidades positivas y `p90Descenso` el valor
+absoluto de las negativas. El percentil se interpola linealmente en la posicion
+`(n - 1) * 0,90`. Por definicion, el percentil 90 delimita el 10 % de las
+variaciones historicas mas rapidas de cada direccion.
+
+La clasificacion actual usa las dos ultimas mediciones distintas:
+
+- velocidad mayor o igual a `p90Ascenso`: **Subida rapida**;
+- velocidad negativa cuyo valor absoluto sea mayor o igual a `p90Descenso`:
+  **Bajada rapida**;
+- otros valores: **Ascenso normal**, **Descenso normal** o **Sin cambios**.
+
+Se exigen 90 dias de cobertura, 100 intervalos validos y dos lecturas recientes
+distintas. Si falta alguna condicion, la interfaz muestra “Datos insuficientes
+para calcular la velocidad” y no usa un umbral de respaldo.
+
+Los niveles oficiales permanecen independientes de este calculo: San Fernando
+tiene 3,00 m para alerta y 3,50 m para evacuacion. Un nivel alto por si solo no
+produce una clasificacion de subida rapida.
+
 La API actualmente se consume con `&` despues del nombre del recurso. Este
 detalle debe quedar encapsulado en un cliente y cubierto por una prueba para
 evitar que una futura migracion de endpoint rompa toda la app.
@@ -247,6 +303,9 @@ Comandos del producto:
 /historial 30d Resumir minima y maxima de los ultimos 30 dias.
 /pausar      Pausar las alertas automaticas.
 /activar     Reactivar las alertas automaticas.
+/resumen     Mostrar el estado del resumen diario de las 08:00.
+/resumen activar Activar el resumen diario.
+/resumen pausar  Pausar el resumen diario.
 /ayuda       Mostrar nuevamente todos los comandos.
 ```
 
@@ -300,19 +359,18 @@ La semantica debe ser estricta:
 
 ### V1: monitoreo avanzado
 
-- `[!]` comparacion entre San Fernando, Tigre, Dique Lujan, Guazucito y otras
-  estaciones disponibles;
-- `[!]` deteccion de subidas o bajadas rapidas, no solo cruce de umbral;
+- `[x]` comparacion observada entre San Fernando, Tigre, Dique Lujan y San
+  Isidro, sin incorporarlas al pronostico;
+- `[x]` deteccion estadistica de subidas o bajadas rapidas por percentil 90;
 - `[!]` alertas diferenciadas para crecida, bajante y recuperacion;
-- `[!]` resumen diario opcional por Telegram;
+- `[x]` resumen diario opcional por Telegram a las 08:00 ART;
 - `[x]` exportacion CSV del historial;
-- `[!]` grafico con umbrales oficiales de alerta y evacuacion;
+- `[x]` grafico con niveles oficiales de alerta a 3,00 m y evacuacion a 3,50 m;
 - `[x]` vista privada de administracion de usuarios y actividad;
 - `[x]` registro de cada alerta enviada, error y reintento.
 
-Los puntos marcados con `[!]` requieren definir estaciones, velocidades de
-cambio, horarios o fuentes oficiales antes de implementar una semantica que
-pueda interpretarse como alerta de seguridad.
+Las alertas diferenciadas siguen pendientes: el indicador estadistico se
+muestra en la web y el resumen, pero no debe confundirse con una alerta oficial.
 
 ### Fuera de alcance inicial
 
@@ -333,6 +391,7 @@ firstName: string|null
 lastName: string|null
 username: string|null
 threshold: number
+dailySummary: boolean
 active: boolean
 joinedAt: timestamp
 lastActiveAt: timestamp
@@ -394,6 +453,11 @@ INA API
 - `telegramWebhook`: normaliza comandos, registra actividad y responde.
 - `checkRiver`: consulta INA, carga chats activos, evalua cada maxima y envia
   alertas idempotentes.
+- `calculateVelocityStats`: recalcula diariamente percentiles sobre 365 dias y
+  guarda el resultado en `publicData/velocity`.
+- `publicRiverStatus`: publica solo el indicador agregado y calcula la
+  variacion reciente con el cache diario, sin descargar 365 dias por visita.
+- `sendDailySummary`: envia a las 08:00 ART solo a chats que lo activaron.
 - Secretos gestionados con Firebase Secret Manager.
 - Firestore como registro de suscripciones y configuracion.
 
@@ -415,6 +479,30 @@ INA API
    identidad Firebase autorizada y nunca quedar abierta por una URL publica.
 8. **Retencion.** Eliminar chats y eventos de alertas sin actividad o con una
    antiguedad mayor a 12 meses; una nueva interaccion vuelve a registrar el chat.
+
+### `publicData/velocity`
+
+```text
+statistics.p90Ascent: number|null
+statistics.p90Descent: number|null
+statistics.validIntervalCount: number
+statistics.ascentCount: number
+statistics.descentCount: number
+statistics.coverageDays: number
+statistics.periodStart: string|null
+statistics.periodEnd: string|null
+statistics.maxIntervalHours: 6
+statistics.sufficient: boolean
+current.observedAt: string|null
+current.previousObservedAt: string|null
+current.change: number|null
+current.hours: number|null
+current.speedMetersPerHour: number|null
+current.speedCentimetersPerHour: number|null
+current.code: string
+calculatedAt: timestamp
+updatedAt: timestamp
+```
 
 ### Decisiones aprobadas el 13 de agosto de 2026
 
@@ -491,7 +579,12 @@ Medicion consultada: 13/08/2026 15:00 ART
 - reintento de `/start` es idempotente;
 - `lastActiveAt` se actualiza en todos los comandos;
 - ventana anti-duplicado de seis horas;
-- error de INA no genera alerta falsa.
+- error de INA no genera alerta falsa;
+- velocidad con intervalos irregulares y conversion entre m/h y cm/h;
+- percentil 90 con interpolacion lineal y ascensos/descensos separados;
+- deduplicacion, orden temporal, intervalos invalidos o excesivos;
+- historial insuficiente, igualdad exacta al percentil y ausencia de una nueva
+  medicion;
 - respuestas reales guardadas del INA mantienen los campos y agrupaciones
   esperados para observaciones y pronostico.
 
@@ -505,13 +598,37 @@ Medicion consultada: 13/08/2026 15:00 ART
 - dos chats con maximos distintos reciben decisiones independientes;
 - los errores de Telegram no rompen el procesamiento de los demas chats.
 - `/pronostico` muestra rangos diarios y `/historial` transmite al cliente INA
-  la cantidad de dias solicitada.
+  la cantidad de dias solicitada;
+- activacion y pausa de `/resumen`, envio unico por fecha y persistencia de los
+  percentiles y la ultima deteccion en Firestore.
 
 La suite automatizada integra el mismo nucleo que usan las Functions con un
 repositorio controlado, y ejecuta por separado el adaptador de persistencia
 contra el emulador oficial de Firestore. Tambien cubre botones inline, errores
 del INA, `429` con `retry_after`, errores `5xx`, fallos de red, respuestas
 invalidas y errores `4xx` no reintentables.
+
+### Validacion estadistica con datos reales del INA
+
+Validacion realizada el 14 de agosto de 2026 sobre el rango
+14/08/2025 00:45 a 13/08/2026 23:45 de San Fernando:
+
+```text
+observaciones normalizadas: 8617
+intervalos validos: 8612
+cobertura: 364,96 dias
+ascensos: 3115
+descensos: 5314
+p90Ascenso: 0,33 m/h (33 cm/h)
+p90Descenso: 0,16 m/h (16 cm/h)
+```
+
+La cantidad, cobertura y frecuencia son estadisticamente razonables frente a
+los minimos aprobados de 90 dias y 100 intervalos. La comparacion manual de las
+ultimas ocho transiciones produjo velocidades entre -0,10 y +0,21 m/h; todas
+quedaron correctamente clasificadas como ascenso o descenso normal frente a
+los percentiles anteriores. La ultima transicion fue 1,25 m a 1,16 m en una
+hora: -0,09 m/h (-9 cm/h), **Descenso normal**.
 
 ### Verificacion de despliegue
 
@@ -547,7 +664,11 @@ y el bot debe responder `/ayuda`, `/estado` y `/maximo` desde un chat real.
 - `[x]` `/estado` incluye timestamp de medicion cuando el INA lo informa.
 - `[x]` Retencion de usuarios inactivos definida en 12 meses.
 - `[x]` Panel de usuarios definido como pantalla Firebase protegida.
-- `[!]` Definir estaciones adicionales para comparar.
+- `[x]` Estaciones adicionales: Tigre, Dique Lujan y San Isidro, solo datos
+  observados.
+- `[x]` Resumen diario opcional definido a las 08:00 ART.
+- `[x]` Niveles oficiales de San Fernando: alerta 3,00 m y evacuacion 3,50 m.
+- `[x]` Velocidad rapida definida con p90 direccional sobre hasta 365 dias.
 - `[x]` El pronostico no dispara alertas; solo lo hace la medicion observada.
 - `[x]` Botones y `setMyCommands` desplegados y verificados con `/start`.
 

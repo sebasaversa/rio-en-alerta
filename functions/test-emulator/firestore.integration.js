@@ -17,6 +17,7 @@ test('el adaptador persiste el ciclo completo de un chat en Firestore', async (c
   assert.equal(stored.chatId, chat.id);
   assert.equal(stored.threshold, 2.5);
   assert.equal(stored.active, true);
+  assert.equal(stored.dailySummary, false);
   assert.equal(stored.lastCommand, '/start');
   assert.equal(typeof stored.joinedAt.toDate, 'function');
   const joinedAt = stored.joinedAt.toMillis();
@@ -35,6 +36,12 @@ test('el adaptador persiste el ciclo completo de un chat en Firestore', async (c
   await repository.setActive(chat.id, true);
   assert.equal((await repository.listActiveChats()).length, 1);
 
+  await repository.setDailySummary(chat.id, true);
+  assert.equal((await repository.listDailySummaryChats()).length, 1);
+  assert.equal(await repository.claimDailySummary(chat.id, '2026-08-14'), true);
+  assert.equal(await repository.claimDailySummary(chat.id, '2026-08-14'), false);
+  assert.equal(await repository.claimDailySummary(chat.id, '2026-08-15'), true);
+
   const observation = { value: 3.4, date: '2026-08-14T14:00:00Z' };
   await repository.recordAlertSent({ id: String(chat.id), chatId: chat.id, threshold: 3.25 }, observation, 123456);
   stored = await repository.getChat(chat.id);
@@ -48,4 +55,19 @@ test('el adaptador persiste el ciclo completo de un chat en Firestore', async (c
   const status = await db.collection('systemStatus').doc('checkRiver').get();
   assert.equal(status.data().ok, true);
   assert.equal(status.data().alertsSent, 1);
+
+  const statistics = {
+    sufficient: true,
+    p90Ascent: 0.33,
+    p90Descent: 0.16,
+    validIntervalCount: 8612,
+  };
+  await repository.setVelocityStatistics(statistics);
+  assert.deepEqual((await repository.getVelocityData()).statistics, statistics);
+  const detection = {
+    code: 'rapid-rise', observedAt: '2026-08-14T14:00:00', speedMetersPerHour: 0.4,
+  };
+  assert.equal(await repository.saveVelocityDetectionIfNew(detection), true);
+  assert.equal(await repository.saveVelocityDetectionIfNew(detection), false);
+  assert.equal((await repository.getVelocityData()).current.code, 'rapid-rise');
 });

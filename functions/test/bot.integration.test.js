@@ -23,6 +23,7 @@ class InMemoryRepository {
       lastName: chat.last_name ?? null,
       username: chat.username ?? null,
       threshold: Number.isFinite(previous.threshold) ? previous.threshold : 2.5,
+      dailySummary: Boolean(previous.dailySummary),
       active: isStart ? true : Boolean(previous.active),
       firstSeenAt: previous.firstSeenAt ?? new Date(),
       joinedAt: isStart ? (previous.joinedAt ?? new Date()) : previous.joinedAt,
@@ -52,6 +53,24 @@ class InMemoryRepository {
 
   async listActiveChats() {
     return [...this.chats.values()].filter((chat) => chat.active);
+  }
+
+  async listDailySummaryChats() {
+    return [...this.chats.values()].filter((chat) => chat.dailySummary);
+  }
+
+  async setDailySummary(chatId, enabled) {
+    const id = String(chatId);
+    const previous = this.chats.get(id) ?? { id, chatId };
+    this.chats.set(id, { ...previous, dailySummary: enabled });
+  }
+
+  async claimDailySummary(chatId, dateKey) {
+    const id = String(chatId);
+    const chat = this.chats.get(id);
+    if (!chat?.dailySummary || chat.lastSummaryDate === dateKey) return false;
+    this.chats.set(id, { ...chat, lastSummaryDate: dateKey });
+    return true;
   }
 
   async recordAlertSent(chat, current, sentAt) {
@@ -169,6 +188,48 @@ test('muestra rango diario en pronóstico y respeta el rango solicitado de histo
   await fixture.bot.processUpdate(update(30, '/historial 2d', 3));
   assert.deepEqual(requestedDays, [7]);
   assert.match(fixture.messages.at(-1).text, /\/historial 24h/);
+});
+
+test('configura y envía una sola vez el resumen diario de las 08:00', async () => {
+  const fixture = createFixture();
+  await fixture.bot.processUpdate(update(40, '/start'));
+  assert.match(fixture.messages.at(-1).text, /\/resumen activar/);
+
+  await fixture.bot.processUpdate(update(40, '/resumen', 2));
+  assert.match(fixture.messages.at(-1).text, /pausado/);
+  await fixture.bot.processUpdate(update(40, '/resumen activar', 3));
+  assert.equal(fixture.repository.chats.get('40').dailySummary, true);
+
+  const summary = {
+    current: { value: 1.2, date: '2026-08-14T11:00:00Z' },
+    dateKey: '2026-08-14',
+    velocityData: {
+      statistics: { sufficient: true },
+      current: {
+        label: 'Subida rápida',
+        speedMetersPerHour: 0.18,
+        speedCentimetersPerHour: 18,
+      },
+    },
+  };
+  assert.deepEqual(await fixture.bot.sendDailySummaries(summary), {
+    chats: 1, sent: 1, skipped: 0, errors: 0,
+  });
+  assert.match(fixture.messages.at(-1).text, /Subida rápida/);
+  assert.match(fixture.messages.at(-1).text, /08:00/);
+  assert.deepEqual(await fixture.bot.sendDailySummaries(summary), {
+    chats: 1, sent: 0, skipped: 1, errors: 0,
+  });
+
+  await fixture.bot.sendDailySummaries({
+    ...summary,
+    dateKey: '2026-08-15',
+    velocityData: { statistics: { sufficient: false } },
+  });
+  assert.match(fixture.messages.at(-1).text, /datos insuficientes/);
+
+  await fixture.bot.processUpdate(update(40, '/resumen pausar', 4));
+  assert.equal(fixture.repository.chats.get('40').dailySummary, false);
 });
 
 test('checkRiver evalúa máximos independientes y continúa si falla un chat', async () => {
