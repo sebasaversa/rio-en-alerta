@@ -73,6 +73,9 @@ Estado de referencia: 14 de agosto de 2026.
   cuenta propietaria autorizada y acceso interactivo validado.
 - `[x]` Visualizacion de `lastActiveAt` publicada en la vista administrativa.
 - `[x]` Workflow publica solo el artefacto web permitido y termino en `success`.
+- `[x]` Las pull requests a `main` ejecutan pruebas del bot, integracion con el
+  emulador de Firestore, validacion sintactica e inspeccion del artefacto web
+  antes de poder fusionarse.
 - `[x]` Firebase Hosting adoptado para el panel administrativo; la web publica
   permanece en GitHub Pages.
 - `[x]` Cliente Telegram con reintentos acotados para `429`, `5xx` y fallos de
@@ -515,9 +518,9 @@ npx firebase-tools functions:list --project rio-en-alerta-sanfernando
 gh run list --repo sebasaversa/rio-en-alerta --limit 1
 ```
 
-La funcion debe figurar `ACTIVE`, el workflow de Pages debe terminar en
-`success` y el bot debe responder `/ayuda`, `/estado` y `/maximo` desde un chat
-real.
+El check `Validate pull request` debe terminar en `success` antes del merge. La
+funcion debe figurar `ACTIVE`, el workflow de Pages debe terminar en `success`
+y el bot debe responder `/ayuda`, `/estado` y `/maximo` desde un chat real.
 
 ## Operacion y costos
 
@@ -570,6 +573,8 @@ metricas y la tabla de usuarios.
 - `v1.1.0`: entrega verificada de Telegram y administracion privada.
 - `v1.1.1`: login administrativo, pruebas de integracion y reintentos de
   Telegram verificados antes de ampliar los comandos de consulta.
+- `v1.2.0`: historial por rango, pronostico diario con minima/maxima y fixtures
+  del contrato real del INA.
 
 Este archivo debe actualizarse cada vez que cambien los comandos, los campos de
 Firestore, la fuente de datos, la frecuencia de consulta, las reglas o el
