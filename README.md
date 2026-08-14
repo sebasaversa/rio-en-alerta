@@ -9,12 +9,18 @@ suscriptores.
 - GitHub Pages publica la web pública y una redirección desde `admin.html`.
 - Firebase Hosting publica únicamente el panel administrativo y sus recursos
   en `https://rio-en-alerta-sanfernando.firebaseapp.com/admin.html`.
-- Firebase Functions ejecuta el webhook de Telegram, la revisión horaria y la
-  retención de chats inactivos.
+- Firebase Functions ejecuta el webhook de Telegram, la revisión horaria, el
+  resumen opcional de las 08:00, el cálculo diario de velocidad y la retención
+  de chats inactivos.
 - El cliente Telegram reintenta errores `429`, `5xx` y fallos de red con
   `retry_after`, backoff exponencial y un presupuesto de espera acotado.
 - El bot ofrece altura actual, máximo personal, pronóstico diario con
-  mínima/máxima e historial de `24h`, `7d` o `30d`.
+  mínima/máxima, historial de `24h`, `7d` o `30d` y resumen diario opcional.
+- La web compara mediciones observadas de Tigre, Dique Luján y San Isidro sin
+  utilizarlas para el pronóstico de San Fernando.
+- El indicador de subida o bajada rápida usa percentiles direccionales del
+  historial de San Fernando y se identifica expresamente como una estimación
+  estadística propia, separada de los niveles oficiales.
 - Firestore guarda suscripciones, actividad, estado operativo y alertas
   enviadas.
 - Firebase Authentication protege el panel administrativo.
