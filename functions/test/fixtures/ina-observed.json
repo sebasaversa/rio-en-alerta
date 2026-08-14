@@ -1,0 +1,27 @@
+{
+  "requestHeader": {
+    "request": "datos",
+    "timeStart": "2026-08-13",
+    "timeEnd": "2026-08-14",
+    "siteCode": "52",
+    "varId": "2",
+    "format": "json"
+  },
+  "responseHeader": {
+    "seriesid": 52,
+    "sitecode": 52,
+    "seriesmetadata": {
+      "varId": 2,
+      "unit_abrev": "m",
+      "var_abrev": "altura"
+    }
+  },
+  "data": [
+    { "obs_id": 28759430327, "timestart": "2026-08-13T03:45:00", "valor": 1.81 },
+    { "obs_id": 28759896274, "timestart": "2026-08-13T04:45:00", "valor": 2.04 },
+    { "obs_id": 28760372552, "timestart": "2026-08-13T05:45:00", "valor": 2.2 },
+    { "obs_id": 28760836078, "timestart": "2026-08-13T06:45:00", "valor": 2.29 },
+    { "obs_id": 28761298914, "timestart": "2026-08-13T07:45:00", "valor": 2.33 },
+    { "obs_id": 28761766603, "timestart": "2026-08-13T08:45:00", "valor": 2.28 }
+  ]
+}

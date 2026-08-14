@@ -63,6 +63,12 @@ Estado de referencia: 14 de agosto de 2026.
   comando procesado.
 - `[x]` Botones, menu y comandos de pronostico/historial desplegados y
   verificados.
+- `[x]` `/pronostico` resume minima y maxima diaria de los valores publicados
+  por el INA, sin presentar una banda estadistica no documentada.
+- `[x]` `/historial` acepta `24h`, `7d` y `30d`; los rangos de varios dias se
+  resumen por minima y maxima diaria.
+- `[x]` Fixtures versionados de observaciones y pronostico reales del INA
+  protegen el contrato externo en la suite automatizada.
 - `[x]` Vista privada publicada en Firebase Hosting, Google Sign-In habilitado,
   cuenta propietaria autorizada y acceso interactivo validado.
 - `[x]` Visualizacion de `lastActiveAt` publicada en la vista administrativa.
@@ -231,6 +237,12 @@ Comandos del producto:
 /estado      Consultar la altura actual del rio.
 /maximo      Mostrar la altura maxima configurada.
 /maximo 2.50 Cambiar la altura maxima configurada.
+/pronostico  Mostrar minima y maxima previstas por dia.
+/historial 24h Mostrar las ultimas mediciones de 24 horas.
+/historial 7d  Resumir minima y maxima de los ultimos 7 dias.
+/historial 30d Resumir minima y maxima de los ultimos 30 dias.
+/pausar      Pausar las alertas automaticas.
+/activar     Reactivar las alertas automaticas.
 /ayuda       Mostrar nuevamente todos los comandos.
 ```
 
@@ -241,6 +253,10 @@ La semantica debe ser estricta:
 - `/maximo X` acepta valores mayores que cero y hasta seis metros.
 - `/estado` consulta el ultimo valor observado y responde con nombre del rio,
   estacion, altura y, cuando sea posible, fecha de la medicion.
+- `/pronostico` agrupa por dia todos los valores que publica el endpoint
+  calibrado del INA y muestra el menor y el mayor. No los denomina intervalo de
+  confianza porque el contrato publico consultado no identifica esa semantica.
+- `/historial` sin argumento equivale a `24h`; solo acepta `24h`, `7d` o `30d`.
 - Los alias viejos no deben mantenerse silenciosamente si generan confusion;
   si se conserva compatibilidad con `/umbral`, debe responderse indicando que
   el comando vigente es `/maximo`.
@@ -268,15 +284,15 @@ La semantica debe ser estricta:
 - alerta con pausa anti-duplicado de seis horas;
 - webhook Firebase protegido por secreto.
 
-### Siguiente entrega recomendada
+### Entrega complementaria de Telegram
 
-- botones inline para nivel, maximo, pronostico, historial y ayuda;
-- respuesta con fecha/hora y zona horaria de Argentina;
-- `/pronostico` con maxima y minima previstas;
-- `/historial 24h`, `/historial 7d` y `/historial 30d`;
-- configuracion de pausa de alertas por usuario;
-- confirmacion explicita al activar/desactivar alertas;
-- tests de contrato contra respuestas reales guardadas como fixtures.
+- `[x]` botones inline para nivel, maximo, pronostico, historial y ayuda;
+- `[x]` respuesta con fecha/hora y zona horaria de Argentina;
+- `[x]` `/pronostico` con maxima y minima previstas;
+- `[x]` `/historial 24h`, `/historial 7d` y `/historial 30d`;
+- `[x]` configuracion de pausa de alertas por usuario;
+- `[x]` confirmacion explicita al activar/desactivar alertas;
+- `[x]` tests de contrato contra respuestas reales guardadas como fixtures.
 
 ### V1: monitoreo avanzado
 
@@ -432,6 +448,18 @@ Altura actual: 0,95 m
 Medicion: 13/08/2026 14:00 ART
 ```
 
+### `/pronostico`
+
+Consulta el endpoint calibrado del INA y muestra hasta cinco dias. Para cada
+fecha informa el menor y el mayor de todos los valores publicados. El
+pronostico es informativo y nunca dispara una alerta automatica.
+
+### `/historial`
+
+- sin argumento o con `24h`: devuelve las ultimas ocho mediciones disponibles;
+- con `7d` o `30d`: devuelve minima y maxima observadas para cada dia;
+- con otro argumento: no consulta el INA y muestra los rangos validos.
+
 ### Alerta automatica
 
 ```text
@@ -456,6 +484,8 @@ Medicion consultada: 13/08/2026 15:00 ART
 - `lastActiveAt` se actualiza en todos los comandos;
 - ventana anti-duplicado de seis horas;
 - error de INA no genera alerta falsa.
+- respuestas reales guardadas del INA mantienen los campos y agrupaciones
+  esperados para observaciones y pronostico.
 
 ### Pruebas de integracion
 
@@ -466,6 +496,8 @@ Medicion consultada: 13/08/2026 15:00 ART
 - `checkRiver` envia solo a chats activos que superan su maxima;
 - dos chats con maximos distintos reciben decisiones independientes;
 - los errores de Telegram no rompen el procesamiento de los demas chats.
+- `/pronostico` muestra rangos diarios y `/historial` transmite al cliente INA
+  la cantidad de dias solicitada.
 
 La suite automatizada integra el mismo nucleo que usan las Functions con un
 repositorio controlado, y ejecuta por separado el adaptador de persistencia
@@ -536,6 +568,8 @@ metricas y la tabla de usuarios.
 - `a487f5c`: bot estabilizado, actividad, retencion, panel privado y publicacion
   segura de Pages.
 - `v1.1.0`: entrega verificada de Telegram y administracion privada.
+- `v1.1.1`: login administrativo, pruebas de integracion y reintentos de
+  Telegram verificados antes de ampliar los comandos de consulta.
 
 Este archivo debe actualizarse cada vez que cambien los comandos, los campos de
 Firestore, la fuente de datos, la frecuencia de consulta, las reglas o el

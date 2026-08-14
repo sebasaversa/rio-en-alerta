@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createBotCore } = require('../bot-core');
+const forecastFixture = require('./fixtures/ina-forecast.json');
 
 class InMemoryRepository {
   constructor(initialChats = []) {
@@ -78,8 +79,8 @@ function createFixture(overrides = {}) {
       value: 0.95,
       date: '2026-08-14T14:00:00Z',
     })),
-    getForecast: async () => ({ data: [] }),
-    getHistory: async () => ({ data: [] }),
+    getForecast: overrides.getForecast ?? (async () => ({ data: [] })),
+    getHistory: overrides.getHistory ?? (async () => ({ data: [] })),
     logger: {
       info: (message, context) => logs.info.push({ message, context }),
       warn: (message, context) => logs.warn.push({ message, context }),
@@ -140,6 +141,34 @@ test('procesa botones inline y registra actividad', async () => {
   assert.deepEqual(fixture.callbacks, ['callback-1']);
   assert.equal(fixture.repository.chats.get('20').lastCommand, '/estado');
   assert.match(fixture.messages[0].text, /Altura actual/);
+});
+
+test('muestra rango diario en pronóstico y respeta el rango solicitado de historial', async () => {
+  const requestedDays = [];
+  const fixture = createFixture({
+    getForecast: async () => forecastFixture,
+    getHistory: async (days) => {
+      requestedDays.push(days);
+      return { data: [
+        { timestart: '2026-08-13T03:00:00', valor: 1 },
+        { timestart: '2026-08-13T12:00:00', valor: 2 },
+        { timestart: '2026-08-14T03:00:00', valor: 0.5 },
+        { timestart: '2026-08-14T12:00:00', valor: 1.5 },
+      ] };
+    },
+  });
+
+  await fixture.bot.processUpdate(update(30, '/pronostico'));
+  assert.match(fixture.messages.at(-1).text, /mín\. \*0,44 m\* · máx\. \*2,07 m\*/);
+
+  await fixture.bot.processUpdate(update(30, '/historial 7d', 2));
+  assert.deepEqual(requestedDays, [7]);
+  assert.match(fixture.messages.at(-1).text, /Historial de 7 días/);
+  assert.match(fixture.messages.at(-1).text, /mín\. \*1,00 m\* · máx\. \*2,00 m\*/);
+
+  await fixture.bot.processUpdate(update(30, '/historial 2d', 3));
+  assert.deepEqual(requestedDays, [7]);
+  assert.match(fixture.messages.at(-1).text, /\/historial 24h/);
 });
 
 test('checkRiver evalúa máximos independientes y continúa si falla un chat', async () => {

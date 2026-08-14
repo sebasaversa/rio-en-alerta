@@ -1,0 +1,36 @@
+{
+  "requestHeader": {
+    "request": "datosProno",
+    "seriesId": "26202",
+    "calId": "432",
+    "siteCode": "52",
+    "varId": "2",
+    "all": "false",
+    "format": "json"
+  },
+  "responseHeader": {
+    "id": 26202,
+    "calid": 432,
+    "estacion_id": 52,
+    "estacion_nombre": "San Fernando",
+    "model_name": "marea_rdp_regre",
+    "unit_abrev": "m"
+  },
+  "data": [
+    { "prono_id": 1415012614, "timestart": "2026-08-14T08:00:00", "valor": 1.78095 },
+    { "prono_id": 1415012615, "timestart": "2026-08-14T08:00:00", "valor": 1.47027 },
+    { "prono_id": 1415012616, "timestart": "2026-08-14T08:00:00", "valor": 1.66663 },
+    { "prono_id": 1415012617, "timestart": "2026-08-14T08:00:00", "valor": 1.9141 },
+    { "prono_id": 1415012618, "timestart": "2026-08-14T08:00:00", "valor": 2.06651 },
+    { "prono_id": 1415012659, "timestart": "2026-08-14T17:00:00", "valor": 0.747968 },
+    { "prono_id": 1415012660, "timestart": "2026-08-14T17:00:00", "valor": 0.437286 },
+    { "prono_id": 1415012661, "timestart": "2026-08-14T17:00:00", "valor": 0.633642 },
+    { "prono_id": 1415012662, "timestart": "2026-08-14T17:00:00", "valor": 0.881111 },
+    { "prono_id": 1415012663, "timestart": "2026-08-14T17:00:00", "valor": 1.03353 },
+    { "prono_id": 1415012709, "timestart": "2026-08-15T03:00:00", "valor": 0.672952 },
+    { "prono_id": 1415012710, "timestart": "2026-08-15T03:00:00", "valor": 0.362271 },
+    { "prono_id": 1415012711, "timestart": "2026-08-15T03:00:00", "valor": 0.558626 },
+    { "prono_id": 1415012712, "timestart": "2026-08-15T03:00:00", "valor": 0.806095 },
+    { "prono_id": 1415012713, "timestart": "2026-08-15T03:00:00", "valor": 0.958514 }
+  ]
+}

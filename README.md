@@ -13,6 +13,8 @@ suscriptores.
   retención de chats inactivos.
 - El cliente Telegram reintenta errores `429`, `5xx` y fallos de red con
   `retry_after`, backoff exponencial y un presupuesto de espera acotado.
+- El bot ofrece altura actual, máximo personal, pronóstico diario con
+  mínima/máxima e historial de `24h`, `7d` o `30d`.
 - Firestore guarda suscripciones, actividad, estado operativo y alertas
   enviadas.
 - Firebase Authentication protege el panel administrativo.
@@ -27,6 +29,9 @@ git diff --check
 
 `test:all` ejecuta las pruebas unitarias y de integracion y levanta de forma
 temporal el emulador oficial de Firestore.
+
+Las pruebas de contrato usan extractos JSON versionados de respuestas reales
+del INA para detectar cambios incompatibles en observaciones o pronóstico.
 
 Para servir la web localmente:
 
