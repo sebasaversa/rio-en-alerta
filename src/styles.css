@@ -42,6 +42,8 @@ h2 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .card { border: 1px solid var(--line); border-radius: 22px; background: #fffdf8; box-shadow: var(--shadow); }
 .level-card { padding: 28px 30px 24px; }
 .card-label-row { display: flex; align-items: center; justify-content: space-between; }
+.level-card-heading .eyebrow { margin-bottom: 6px; }
+.level-card-heading .card-label { margin-bottom: 0; }
 .pill { padding: 6px 10px; border-radius: 20px; background: #daf1e9; color: #17694d; font-size: .78rem; font-weight: 750; }
 .pill.is-warning { background: #f9e7c9; color: #9c5d00; }
 .pill.is-danger { background: #f7d6d3; color: #a2302a; }

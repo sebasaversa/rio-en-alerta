@@ -22,7 +22,6 @@
 
       <section class="hero" id="inicio" aria-labelledby="page-title">
         <div>
-          <p class="eyebrow">Río Luján · San Fernando</p>
           <h1 id="page-title">El río, claro y a tiempo.</h1>
           <p class="hero-copy">Consultá el nivel observado y anticipá los próximos días antes de que el agua te sorprenda.</p>
         </div>
@@ -32,7 +31,10 @@
       <section class="dashboard" aria-label="Estado del río">
         <article class="level-card card">
           <div class="card-label-row">
-            <p class="card-label">Nivel actual</p>
+            <div class="level-card-heading">
+              <p class="eyebrow">Río Luján · San Fernando</p>
+              <p class="card-label">Altura actual</p>
+            </div>
             <span class="pill" id="level-state">Normal</span>
           </div>
           <div class="level-reading">
@@ -74,7 +76,7 @@
         <div class="section-heading">
           <div><p class="eyebrow">Datos observados</p><h2 id="history-title">Historial del río</h2></div>
           <div class="history-controls">
-            <label>Ver <select id="history-range"><option value="1">por hora · 24 h</option><option value="7">promedio diario · 7 días</option><option value="30">promedio diario · 30 días</option><option value="90">promedio diario · 3 meses</option><option value="180">promedio diario · 6 meses</option><option value="365">promedio diario · 12 meses</option></select></label>
+            <label>Ver <select id="history-range"><option value="1">por hora · 24 h</option><option value="7" selected>promedio diario · 7 días</option><option value="30">promedio diario · 30 días</option><option value="90">promedio diario · 3 meses</option><option value="180">promedio diario · 6 meses</option><option value="365">promedio diario · 12 meses</option></select></label>
             <a class="outline-button history-download" id="history-download" aria-disabled="true">Descargar CSV</a>
           </div>
         </div>
@@ -86,8 +88,8 @@
             <div class="history-chart-actions">
               <div class="history-scale-controls" role="group" aria-label="Escala vertical del gráfico">
                 <span>Alturas:</span>
-                <button class="history-scale-button is-active" id="history-scale-detail" type="button" aria-label="Ver variaciones con escala ajustada" aria-pressed="true">Variaciones</button>
-                <button class="history-scale-button" id="history-scale-full" type="button" aria-label="Ver escala con niveles oficiales" aria-pressed="false">Niveles oficiales</button>
+                <button class="history-scale-button" id="history-scale-detail" type="button" aria-label="Ver variaciones con escala ajustada" aria-pressed="false">Variaciones</button>
+                <button class="history-scale-button is-active" id="history-scale-full" type="button" aria-label="Ver escala con niveles oficiales" aria-pressed="true">Niveles oficiales</button>
               </div>
               <div class="history-zoom-controls" role="group" aria-label="Zoom del gráfico">
                 <button class="history-zoom-button" id="history-zoom-in" type="button" aria-label="Acercar el gráfico">＋ Acercar</button>

@@ -40,7 +40,7 @@ let historyDownloadUrl = null;
 let historyRequestId = 0;
 let historyChartModel = null;
 let historyViewport = { start: 0, end: 1 };
-let historyScaleMode = "detail";
+let historyScaleMode = "full";
 const historyPointers = new Map();
 let historyGesture = null;
 
