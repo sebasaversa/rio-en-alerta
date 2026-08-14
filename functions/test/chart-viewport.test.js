@@ -42,3 +42,30 @@ test('detecta la vista completa aun después de normalizarla', async () => {
   assert.equal(isFullViewport({ start: -1, end: 2 }), true);
   assert.equal(isFullViewport({ start: 0.1, end: 0.9 }), false);
 });
+
+test('crea una escala legible con cinco o seis marcas y margen visual', async () => {
+  const { niceScale } = await import('../../src/chart-viewport.mjs');
+  assert.deepEqual(niceScale([0.72, 1.48]), {
+    min: 0.6,
+    max: 1.6,
+    step: 0.2,
+    ticks: [0.6, 0.8, 1, 1.2, 1.4, 1.6],
+  });
+});
+
+test('la escala de detalle no agrega valores negativos si todas las alturas son positivas', async () => {
+  const { niceScale } = await import('../../src/chart-viewport.mjs');
+  const scale = niceScale([0.01, 0.08]);
+  assert.equal(scale.min, 0);
+  assert.ok(scale.ticks.length >= 5);
+});
+
+test('encuentra la medición temporalmente más cercana', async () => {
+  const { nearestRow } = await import('../../src/chart-viewport.mjs');
+  const rows = [
+    { date: '2026-08-10T10:00:00', value: 1.1 },
+    { date: '2026-08-10T12:00:00', value: 1.3 },
+  ];
+  assert.equal(nearestRow(rows, Date.parse('2026-08-10T11:40:00Z')).value, 1.3);
+  assert.equal(nearestRow([], Date.now()), null);
+});

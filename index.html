@@ -83,16 +83,26 @@
           <div id="history-legend" class="history-legend" aria-label="Estaciones incluidas en el gráfico"></div>
           <div class="history-chart-toolbar">
             <p id="history-zoom-status" aria-live="polite">Vista completa</p>
-            <div class="history-zoom-controls" role="group" aria-label="Zoom del gráfico">
-              <button class="history-zoom-button" id="history-zoom-in" type="button" aria-label="Acercar el gráfico">＋ Acercar</button>
-              <button class="history-zoom-button" id="history-zoom-out" type="button" aria-label="Alejar el gráfico" disabled>− Alejar</button>
-              <button class="history-zoom-button" id="history-zoom-reset" type="button" disabled>Restablecer</button>
+            <div class="history-chart-actions">
+              <div class="history-scale-controls" role="group" aria-label="Escala vertical del gráfico">
+                <span>Alturas:</span>
+                <button class="history-scale-button is-active" id="history-scale-detail" type="button" aria-label="Ver variaciones con escala ajustada" aria-pressed="true">Variaciones</button>
+                <button class="history-scale-button" id="history-scale-full" type="button" aria-label="Ver escala con niveles oficiales" aria-pressed="false">Niveles oficiales</button>
+              </div>
+              <div class="history-zoom-controls" role="group" aria-label="Zoom del gráfico">
+                <button class="history-zoom-button" id="history-zoom-in" type="button" aria-label="Acercar el gráfico">＋ Acercar</button>
+                <button class="history-zoom-button" id="history-zoom-out" type="button" aria-label="Alejar el gráfico" disabled>− Alejar</button>
+                <button class="history-zoom-button" id="history-zoom-reset" type="button" disabled>Restablecer</button>
+              </div>
             </div>
           </div>
           <div class="history-chart-frame">
             <svg id="history-chart" viewBox="0 0 700 190" role="img" aria-label="Comparación histórica de alturas observadas. Use la rueda, arrastre o pellizque para ampliar el período." tabindex="0"></svg>
+            <div class="history-chart-tooltip" id="history-chart-tooltip" role="tooltip" hidden></div>
           </div>
-          <p class="history-zoom-help">Usá la rueda o los botones para ampliar. Arrastrá para recorrer el período; en celular, pellizcá con dos dedos.</p>
+          <p class="history-scale-note" id="history-scale-note"></p>
+          <p class="history-zoom-help">Usá la rueda o los botones para ampliar. Arrastrá para recorrer el período; en celular, pellizcá con dos dedos. Pasá el cursor o tocá una marca para ver las alturas exactas.</p>
+          <p class="history-list-title" id="history-list-title">San Fernando en el período visible</p>
           <div id="history-list" class="history-list"></div>
         </div>
       </section>
