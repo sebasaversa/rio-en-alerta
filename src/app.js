@@ -1,3 +1,5 @@
+import { buildHistoryCsv, historyCsvFilename } from "./history.mjs";
+
 const API_BASE = "https://alerta.ina.gob.ar/pub/datos";
 const STATION = { siteCode: 52, seriesId: 52, varId: 2, name: "San Fernando" };
 
@@ -12,11 +14,26 @@ const elements = {
   trendLabel: document.querySelector("#trend-label"),
   trendDescription: document.querySelector("#trend-description"),
   forecastGrid: document.querySelector("#forecast-grid"),
-  historyRange: document.querySelector("#history-range"), historyChart: document.querySelector("#history-chart"), historyList: document.querySelector("#history-list"), historySummary: document.querySelector("#history-summary"),
+  historyRange: document.querySelector("#history-range"), historyDownload: document.querySelector("#history-download"), historyChart: document.querySelector("#history-chart"), historyList: document.querySelector("#history-list"), historySummary: document.querySelector("#history-summary"),
 };
 
 let thresholds = { alert: 3, evacuation: 3.5 };
-let latest = { current: null, forecast: [] };
+let latest = { current: null, forecast: [], history: [] };
+let historyDownloadUrl = null;
+
+function setHistoryDownload(rows, days) {
+  if (historyDownloadUrl) URL.revokeObjectURL(historyDownloadUrl);
+  historyDownloadUrl = null;
+  elements.historyDownload.removeAttribute("href");
+  elements.historyDownload.removeAttribute("download");
+  elements.historyDownload.setAttribute("aria-disabled", "true");
+  if (!rows.length) return;
+  const csv = buildHistoryCsv(rows, { stationName: STATION.name, river: "Río Luján" });
+  historyDownloadUrl = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  elements.historyDownload.href = historyDownloadUrl;
+  elements.historyDownload.download = historyCsvFilename(days);
+  elements.historyDownload.setAttribute("aria-disabled", "false");
+}
 
 function apiUrl(resource, params) {
   // Esta API histórica usa & inmediatamente después del recurso, no ?.
@@ -147,8 +164,38 @@ async function refresh() {
 }
 
 async function loadHistory() {
-  const days = Number(elements.historyRange.value); const end = new Date(); const start = new Date(end); start.setDate(start.getDate() - days);
-  try { const rows = normalizeObservations(await getJson("datos", {timeStart:start.toISOString().slice(0,10),timeEnd:end.toISOString().slice(0,10),siteCode:52,varId:2,format:"json"})); const shown = days === 1 ? rows : rows.filter((_,i)=>i===0 || i===rows.length-1 || i % Math.max(1,Math.floor(rows.length/12))===0); const vals=shown.map(x=>x.value), min=Math.min(...vals), max=Math.max(...vals), span=max-min||1, x=i=>i/(shown.length-1||1)*620+60, y=v=>165-(v-min)/span*125; const points=shown.map((v,i)=>`${x(i)},${y(v.value)}`).join(" "), stamp=i=>new Intl.DateTimeFormat('es-AR',{day:'numeric',month:'short',timeZone:'America/Argentina/Buenos_Aires'}).format(asDate(shown[i].date)), compact=v=>new Intl.DateTimeFormat('es-AR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'America/Argentina/Buenos_Aires'}).format(asDate(v.date)).replace(',', ' ·'); elements.historyChart.innerHTML=`<line x1="60" y1="165" x2="690" y2="165"/><line x1="60" y1="40" x2="60" y2="165"/><text x="4" y="45">${formatLevel(max)} m</text><text x="4" y="165">${formatLevel(min)} m</text><polyline points="${points}"/>${shown.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v.value)}" r="4"><title>${formatDate(v.date)}: ${formatLevel(v.value)} m</title></circle>`).join('')}<text x="60" y="187">${stamp(0)}</text><text text-anchor="end" x="690" y="187">${stamp(shown.length-1)}</text>`; elements.historySummary.textContent=`${shown.length} mediciones · mínimo ${formatLevel(min)} m · máximo ${formatLevel(max)} m`; elements.historyList.innerHTML=shown.slice(-4).map(x=>`<div class="history-item">${compact(x)}<strong>${formatLevel(x.value)} m</strong></div>`).join(""); } catch { elements.historySummary.textContent="No se pudo cargar el historial."; }
+  const days = Number(elements.historyRange.value);
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - days);
+  setHistoryDownload([], days);
+  latest.history = [];
+  try {
+    const rows = normalizeObservations(await getJson("datos", {
+      timeStart: start.toISOString().slice(0, 10), timeEnd: end.toISOString().slice(0, 10), siteCode: 52, varId: 2, format: "json",
+    }));
+    if (!rows.length) throw new Error("El INA no devolvió mediciones históricas.");
+    latest.history = rows;
+    setHistoryDownload(rows, days);
+    const shown = days === 1 ? rows : rows.filter((_, i) => i === 0 || i === rows.length - 1 || i % Math.max(1, Math.floor(rows.length / 12)) === 0);
+    const values = rows.map((row) => row.value);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = max - min || 1;
+    const x = (index) => index / (shown.length - 1 || 1) * 620 + 60;
+    const y = (value) => 165 - (value - min) / span * 125;
+    const points = shown.map((row, index) => `${x(index)},${y(row.value)}`).join(" ");
+    const stamp = (index) => new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(asDate(shown[index].date));
+    const compact = (row) => new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" }).format(asDate(row.date)).replace(",", " ·");
+    elements.historyChart.innerHTML = `<line x1="60" y1="165" x2="690" y2="165"/><line x1="60" y1="40" x2="60" y2="165"/><text x="4" y="45">${formatLevel(max)} m</text><text x="4" y="165">${formatLevel(min)} m</text><polyline points="${points}"/>${shown.map((row, index) => `<circle cx="${x(index)}" cy="${y(row.value)}" r="4"><title>${formatDate(row.date)}: ${formatLevel(row.value)} m</title></circle>`).join("")}<text x="60" y="187">${stamp(0)}</text><text text-anchor="end" x="690" y="187">${stamp(shown.length - 1)}</text>`;
+    elements.historySummary.textContent = `${rows.length} mediciones en el rango · mínimo ${formatLevel(min)} m · máximo ${formatLevel(max)} m`;
+    elements.historyList.innerHTML = shown.slice(-4).map((row) => `<div class="history-item">${compact(row)}<strong>${formatLevel(row.value)} m</strong></div>`).join("");
+  } catch (error) {
+    elements.historySummary.textContent = "No se pudo cargar el historial.";
+    elements.historyChart.innerHTML = "";
+    elements.historyList.innerHTML = "";
+    console.error(error);
+  }
 }
 
 elements.refreshButton.addEventListener("click", refresh);

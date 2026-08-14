@@ -52,6 +52,7 @@ Estado de referencia: 14 de agosto de 2026.
 - `[x]` Consulta de pronostico calibrado de San Fernando.
 - `[x]` Historial web con seleccion de 24 horas, 7 dias y 30 dias.
 - `[x]` Historial ordenado de mas antiguo a mas reciente.
+- `[x]` Descarga CSV del historial completo para el rango seleccionado.
 - `[x]` Vista movil optimizada.
 - `[x]` Seccion de alertas web eliminada; las alertas se gestionan por Telegram.
 - `[x]` Bot Telegram creado, secreto `TELEGRAM_BOT_TOKEN` guardado y webhook
@@ -299,15 +300,19 @@ La semantica debe ser estricta:
 
 ### V1: monitoreo avanzado
 
-- comparacion entre San Fernando, Tigre, Dique Lujan, Guazucito y otras
+- `[!]` comparacion entre San Fernando, Tigre, Dique Lujan, Guazucito y otras
   estaciones disponibles;
-- deteccion de subidas o bajadas rapidas, no solo cruce de umbral;
-- alertas diferenciadas para crecida, bajante y recuperacion;
-- resumen diario opcional por Telegram;
-- exportacion CSV del historial;
-- grafico con umbrales oficiales de alerta y evacuacion;
-- vista privada de administracion de usuarios y actividad;
-- registro de cada alerta enviada, error y reintento.
+- `[!]` deteccion de subidas o bajadas rapidas, no solo cruce de umbral;
+- `[!]` alertas diferenciadas para crecida, bajante y recuperacion;
+- `[!]` resumen diario opcional por Telegram;
+- `[x]` exportacion CSV del historial;
+- `[!]` grafico con umbrales oficiales de alerta y evacuacion;
+- `[x]` vista privada de administracion de usuarios y actividad;
+- `[x]` registro de cada alerta enviada, error y reintento.
+
+Los puntos marcados con `[!]` requieren definir estaciones, velocidades de
+cambio, horarios o fuentes oficiales antes de implementar una semantica que
+pueda interpretarse como alerta de seguridad.
 
 ### Fuera de alcance inicial
 
@@ -542,7 +547,7 @@ y el bot debe responder `/ayuda`, `/estado` y `/maximo` desde un chat real.
 - `[x]` `/estado` incluye timestamp de medicion cuando el INA lo informa.
 - `[x]` Retencion de usuarios inactivos definida en 12 meses.
 - `[x]` Panel de usuarios definido como pantalla Firebase protegida.
-- `[ ]` Definir estaciones adicionales para comparar.
+- `[!]` Definir estaciones adicionales para comparar.
 - `[x]` El pronostico no dispara alertas; solo lo hace la medicion observada.
 - `[x]` Botones y `setMyCommands` desplegados y verificados con `/start`.
 
