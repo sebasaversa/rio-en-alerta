@@ -54,4 +54,7 @@ La documentación funcional y operativa completa está en
 
 La app consulta la API pública del Sistema de Información Hidrológica del INA
 (SIyAH), usando `siteCode=52`, `varId=2` y el pronóstico calibrado de San
-Fernando. Los valores son informativos y no sustituyen avisos oficiales.
+Fernando. El historial puede descargarse como CSV para `24h`, `7d` o `30d` y
+conserva todas las mediciones recibidas en el rango, aunque el gráfico reduzca
+la cantidad de puntos visibles. Los valores son informativos y no sustituyen
+avisos oficiales.
