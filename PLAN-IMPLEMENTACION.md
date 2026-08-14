@@ -57,6 +57,8 @@ Estado de referencia: 14 de agosto de 2026.
 - `[x]` Grafico historico comparativo de San Fernando, Tigre, Dique Lujan y
   San Isidro; las tres estaciones adicionales son solo observadas y no se usan
   en el pronostico.
+- `[x]` Zoom horizontal y desplazamiento del grafico historico mediante botones,
+  rueda, teclado, arrastre y gesto tactil de pellizcar.
 - `[x]` Vista movil optimizada.
 - `[x]` Seccion de alertas web eliminada; las alertas se gestionan por Telegram.
 - `[x]` Bot Telegram creado, secreto `TELEGRAM_BOT_TOKEN` guardado y webhook
@@ -461,6 +463,11 @@ Tigre, Dique Lujan y San Isidro. Estas tres estaciones adicionales son
 exclusivamente observadas: no modifican el nivel actual, la tendencia, las
 alertas ni el pronostico de San Fernando. La descarga CSV conserva las
 mediciones originales, sin promediar, y corresponde solo a San Fernando.
+
+El zoom modifica solamente la ventana temporal visible. La escala vertical y
+las lineas oficiales de alerta y evacuacion permanecen fijas para evitar una
+interpretacion engañosa al ampliar. La vista puede restablecerse en cualquier
+momento y los extremos del eje temporal se actualizan con el periodo visible.
 
 ## Arquitectura
 
