@@ -6,8 +6,9 @@ suscriptores.
 
 ## Arquitectura
 
-- GitHub Pages publica únicamente `index.html`, `admin.html` y los recursos
-  seleccionados de `src/`.
+- GitHub Pages publica la web pública y una redirección desde `admin.html`.
+- Firebase Hosting publica únicamente el panel administrativo y sus recursos
+  en `https://rio-en-alerta-sanfernando.firebaseapp.com/admin.html`.
 - Firebase Functions ejecuta el webhook de Telegram, la revisión horaria y la
   retención de chats inactivos.
 - Firestore guarda suscripciones, actividad, estado operativo y alertas
@@ -28,8 +29,10 @@ Para servir la web localmente:
 python3 -m http.server 8080
 ```
 
-La publicación web se realiza automáticamente desde `main`. El workflow crea
-un artefacto mínimo y no incluye `functions/`, reglas ni configuración backend.
+La publicación pública se realiza automáticamente desde `main`. El workflow
+crea un artefacto mínimo y no incluye `functions/`, reglas ni configuración
+backend. El panel se despliega desde `firebase-dist/`, que contiene solamente
+`admin.html` y los cuatro recursos de frontend que necesita.
 
 La documentación funcional y operativa completa está en
 `PLAN-IMPLEMENTACION.md`.

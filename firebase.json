@@ -5,6 +5,25 @@
   "functions": {
     "source": "functions"
   },
+  "hosting": {
+    "public": "firebase-dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "source": "/admin.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      }
+    ]
+  },
   "auth": {
     "providers": {
       "anonymous": true,

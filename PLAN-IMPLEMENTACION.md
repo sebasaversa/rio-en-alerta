@@ -63,12 +63,12 @@ Estado de referencia: 13 de agosto de 2026.
   comando procesado.
 - `[x]` Botones, menu y comandos de pronostico/historial desplegados y
   verificados.
-- `[~]` Vista privada publicada, Google Sign-In habilitado y cuenta propietaria
-  autorizada; resta la primera validacion interactiva del propietario.
+- `[x]` Vista privada publicada en Firebase Hosting, Google Sign-In habilitado,
+  cuenta propietaria autorizada y acceso interactivo validado.
 - `[x]` Visualizacion de `lastActiveAt` publicada en la vista administrativa.
 - `[x]` Workflow publica solo el artefacto web permitido y termino en `success`.
-- `[x]` Firebase Hosting evaluado: se mantiene GitHub Pages hasta contar con una
-  necesidad concreta de rutas privadas o dominio propio.
+- `[x]` Firebase Hosting adoptado para el panel administrativo; la web publica
+  permanece en GitHub Pages.
 
 ## Estrategia de hosting y migracion
 
@@ -77,14 +77,21 @@ Estado de referencia: 13 de agosto de 2026.
 Se mantiene una arquitectura hibrida:
 
 - **GitHub Pages** aloja la web publica estatica.
+- **Firebase Hosting** aloja `admin.html` en el mismo dominio que el auxiliar
+  de Firebase Authentication y evita que el acceso dependa de ventanas
+  emergentes o almacenamiento de terceros.
 - **GitHub** conserva el codigo fuente, historial, tags y automatizacion de
   despliegues.
 - **Firebase** aloja Functions, Firestore, Secret Manager y Scheduler.
 
-Esta decision evita una migracion con poco beneficio para el MVP actual. La
-web no necesita renderizado del servidor, rutas privadas ni un dominio propio
-para funcionar. Firebase Hosting queda como una opcion posterior, no como un
-requisito de la siguiente entrega.
+La web publica no necesita renderizado del servidor, rutas privadas ni un
+dominio propio. El panel autenticado si se sirve desde
+`https://rio-en-alerta-sanfernando.firebaseapp.com/admin.html`; la copia de
+`admin.html` publicada por Pages redirige a esa URL. El repositorio y el
+workflow de GitHub siguen siendo la fuente de verdad para el frontend.
+El despliegue de Hosting se construye en `firebase-dist/` e incluye solamente
+`admin.html` y los estilos y modulos que necesita el panel; no publica Functions
+ni el resto del repositorio.
 
 ### Criterios para reconsiderar la migracion
 
@@ -338,6 +345,7 @@ INA API
   ├─ datos observados ───────────────┐
   └─ datosProno ─────────────────────┤
                                      ├─ Web GitHub Pages
+                                     ├─ Panel Firebase Hosting + Auth
                                      └─ Cloud Functions
                                           ├─ telegramWebhook
                                           ├─ checkRiver cada 60 min
@@ -388,8 +396,8 @@ INA API
   pronostico;
 - Telegram ofrece botones y comandos para estado, maximo, pronostico, historial
   y ayuda;
-- GitHub Pages se mantiene como hosting publico mientras no exista una ventaja
-  concreta que justifique Firebase Hosting.
+- GitHub Pages se mantiene como hosting publico y Firebase Hosting se usa solo
+  para el panel autenticado, donde evita depender de ventanas emergentes.
 
 ## Contratos de comandos
 
@@ -492,11 +500,17 @@ real.
 
 ## Puesta en marcha del panel administrativo
 
-El panel esta publicado en `admin.html`, pero Firestore solo entrega datos a UIDs
-presentes en `adminUsers/{uid}` con `active: true`. El primer acceso se realiza
-con Google. La cuenta propietaria `sebastianaversa@gmail.com` ya fue vinculada y
-autorizada. Las altas administrativas se hacen desde un entorno confiable;
-nunca desde el navegador ni mediante reglas de autoasignacion.
+El panel esta publicado en
+`https://rio-en-alerta-sanfernando.firebaseapp.com/admin.html`, pero Firestore
+solo entrega datos a UIDs presentes en `adminUsers/{uid}` con `active: true`.
+El primer acceso se realiza con Google mediante redireccion de pagina completa.
+La cuenta propietaria `sebastianaversa@gmail.com` ya fue vinculada y autorizada.
+Las altas administrativas se hacen desde un entorno confiable; nunca desde el
+navegador ni mediante reglas de autoasignacion.
+
+El 14 de agosto de 2026 se valido el recorrido real: seleccion de la cuenta,
+consentimiento Google, retorno a Firebase, autorizacion Firestore y carga de las
+metricas y la tabla de usuarios.
 
 ## Historial de entregas
 

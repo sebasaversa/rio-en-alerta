@@ -3,7 +3,6 @@ import {
   GoogleAuthProvider,
   getRedirectResult,
   onAuthStateChanged,
-  signInWithPopup,
   signInWithRedirect,
   signOut,
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
@@ -125,14 +124,12 @@ async function showUnauthorized(user) {
 }
 
 elements.signIn.addEventListener("click", async () => {
-  elements.loginMessage.textContent = "Abriendo Google…";
+  elements.signIn.disabled = true;
+  elements.loginMessage.textContent = "Redirigiendo a Google…";
   try {
-    await signInWithPopup(auth, provider);
+    await signInWithRedirect(auth, provider);
   } catch (error) {
-    if (["auth/popup-blocked", "auth/cancelled-popup-request", "auth/operation-not-supported-in-this-environment"].includes(error.code)) {
-      await signInWithRedirect(auth, provider);
-      return;
-    }
+    elements.signIn.disabled = false;
     elements.loginMessage.textContent = `No se pudo ingresar: ${error.message}`;
   }
 });
@@ -156,6 +153,7 @@ onAuthStateChanged(auth, async (user) => {
     elements.dashboard.classList.add("is-hidden");
     elements.signOut.classList.add("is-hidden");
     elements.signIn.classList.remove("is-hidden");
+    elements.signIn.disabled = false;
     elements.loginMessage.textContent = "";
     return;
   }
