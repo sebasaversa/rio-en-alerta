@@ -15,6 +15,7 @@ const OBSERVED_STATIONS = HISTORY_STATIONS.slice(1);
 const elements = {
   themeSelect: document.querySelector("#theme-select"),
   themeColor: document.querySelector("#theme-color"),
+  backToTop: document.querySelector("#back-to-top"),
   connectionStatus: document.querySelector("#connection-status"),
   refreshButton: document.querySelector("#refresh-button"),
   currentLevel: document.querySelector("#current-level"),
@@ -575,6 +576,10 @@ async function loadHistory() {
 }
 
 elements.themeSelect.addEventListener("change", (event) => setTheme(event.target.value));
+elements.backToTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+window.addEventListener("scroll", () => {
+  elements.backToTop.classList.toggle("is-visible", window.scrollY > 480);
+}, { passive: true });
 elements.refreshButton.addEventListener("click", refresh);
 elements.historyRange.addEventListener("change", loadHistory);
 elements.historyZoomIn.addEventListener("click", () => setHistoryViewport(zoomViewport(historyViewport, 1.6, 0.5)));
