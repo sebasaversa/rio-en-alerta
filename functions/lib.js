@@ -19,12 +19,16 @@ function buildInaUrl(resource, params) {
 }
 
 function observationUrl(now = new Date(), days = 3) {
+  return stationObservationUrl(STATION, now, days);
+}
+
+function stationObservationUrl(station, now = new Date(), days = 3) {
   const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   return buildInaUrl('datos', {
     timeStart: dateParam(start),
     timeEnd: dateParam(now),
-    siteCode: STATION.siteCode,
-    varId: STATION.varId,
+    siteCode: station.siteCode,
+    varId: station.varId,
     format: 'json',
   });
 }
@@ -60,8 +64,8 @@ function normalizeRows(payload) {
   return source
     .flatMap((row) => row?.pronosticos ?? row?.values ?? [row])
     .map((row) => ({
-      date: row?.timestart ?? row?.fecha ?? row?.time ?? row?.date ?? row?.[0],
-      value: Number(row?.valor ?? row?.value ?? row?.valor_num ?? row?.[1]),
+      date: row?.timestart ?? row?.fecha ?? row?.time ?? row?.date ?? row?.d ?? row?.[0],
+      value: Number(row?.valor ?? row?.value ?? row?.valor_num ?? row?.v ?? row?.[1]),
     }))
     .filter((row) => parseDate(row.date) && Number.isFinite(row.value))
     .sort((left, right) => parseDate(left.date) - parseDate(right.date));
@@ -140,4 +144,5 @@ module.exports = {
   observationUrl,
   parseDate,
   parseThreshold,
+  stationObservationUrl,
 };

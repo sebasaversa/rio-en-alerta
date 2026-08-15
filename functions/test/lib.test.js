@@ -9,6 +9,7 @@ const {
   normalizeRows,
   observationUrl,
   parseThreshold,
+  stationObservationUrl,
 } = require('../lib');
 const observedFixture = require('./fixtures/ina-observed.json');
 const forecastFixture = require('./fixtures/ina-forecast.json');
@@ -32,6 +33,7 @@ test('mantiene la sintaxis especial de la API del INA', () => {
   assert.match(url, /\/datos&timeStart=2026-08-12&timeEnd=2026-08-13/);
   assert.match(url, /siteCode=52/);
   assert.doesNotMatch(url, /\/datos\?/);
+  assert.match(stationObservationUrl({ siteCode: 49, varId: 2 }, new Date('2026-08-13T12:00:00Z'), 7), /siteCode=49/);
 });
 
 test('normaliza comandos con usuario del bot y argumentos', () => {

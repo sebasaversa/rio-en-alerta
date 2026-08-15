@@ -6,7 +6,8 @@ const { initializeApp } = require('firebase-admin/app');
 const { FieldValue, Timestamp, getFirestore } = require('firebase-admin/firestore');
 const { COMMANDS, MAIN_KEYBOARD, createBotCore } = require('./bot-core');
 const { createFirestoreRepository } = require('./firestore-repository');
-const { currentObservation, forecastUrl, observationUrl } = require('./lib');
+const { STATION, currentObservation, forecastUrl, observationUrl, stationObservationUrl } = require('./lib');
+const { compactPublicRows, parsePublicHistoryDays } = require('./public-cache');
 const { buildPublicStatusPayload } = require('./public-status');
 const { createTelegramClient } = require('./telegram-client');
 const { calculateCurrentVelocity, calculateVelocityStatistics } = require('./velocity');
@@ -16,6 +17,12 @@ const db = getFirestore();
 const telegramToken = defineSecret('TELEGRAM_BOT_TOKEN');
 const REGION = 'us-central1';
 const RETENTION_MONTHS = 12;
+const PUBLIC_STATIONS = Object.freeze([
+  STATION,
+  { siteCode: 49, varId: 2, name: 'Tigre', river: 'Río Luján' },
+  { siteCode: 50, varId: 2, name: 'Dique Luján', river: 'Río Luján' },
+  { siteCode: 53, varId: 2, name: 'San Isidro', river: 'Río de la Plata' },
+]);
 
 const telegramClient = createTelegramClient({
   token: () => telegramToken.value(),
@@ -58,6 +65,32 @@ function argentinaDateKey(date = new Date()) {
 }
 
 const repository = createFirestoreRepository({ db, FieldValue });
+
+async function refreshPublicDataCache(historyDays) {
+  const now = new Date();
+  const timeoutMs = historyDays >= 365 ? 120000 : 30000;
+  const tasks = [
+    getJson(forecastUrl(now), 30000).then(async (payload) => {
+      const rows = compactPublicRows(payload);
+      if (!rows.length) throw new Error('INA no devolvió un pronóstico válido para cachear');
+      await repository.setPublicForecast(rows);
+      return { kind: 'forecast', rowCount: rows.length };
+    }),
+    ...PUBLIC_STATIONS.map((station) => getJson(stationObservationUrl(station, now, historyDays), timeoutMs).then(async (payload) => {
+      const rows = compactPublicRows(payload);
+      if (!rows.length) throw new Error(`INA no devolvió historial válido para ${station.name}`);
+      const rowCount = await repository.mergePublicHistory(station.siteCode, rows, now);
+      return { kind: 'history', siteCode: station.siteCode, rowCount };
+    })),
+  ];
+  const results = await Promise.allSettled(tasks);
+  const completed = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);
+  const failed = results.filter((result) => result.status === 'rejected').map((result) => result.reason?.message ?? String(result.reason));
+  logger.info('Caché público procesado', { historyDays, completed, failed });
+  if (!completed.length) throw new Error(`No se pudo actualizar ninguna fuente del caché público: ${failed.join('; ')}`);
+  return { historyDays, completed, failed };
+}
+
 const bot = createBotCore({
   repository,
   sendMessage,
@@ -91,6 +124,11 @@ exports.checkRiver = onSchedule(
     const payload = await getJson(observationUrl());
     const current = currentObservation(payload);
     if (!current) throw new Error('INA no devolvió una medición válida');
+    try {
+      await repository.mergePublicHistory(STATION.siteCode, compactPublicRows(payload));
+    } catch (error) {
+      logger.warn('No se pudo guardar el historial público de San Fernando', { error: error.message });
+    }
     const isNewObservation = await repository.claimObservation(current.date);
     let detection = null;
     let statistics = null;
@@ -181,13 +219,41 @@ exports.publicRiverStatus = onRequest(
       response.sendStatus(405);
       return;
     }
-    const payload = buildPublicStatusPayload(await repository.getVelocityData());
+    const days = parsePublicHistoryDays(request.query.days);
+    const [velocityData, forecast, histories] = await Promise.all([
+      repository.getVelocityData(),
+      repository.getPublicForecast(),
+      repository.getPublicHistories(PUBLIC_STATIONS.map((station) => station.siteCode)),
+    ]);
+    const payload = buildPublicStatusPayload(velocityData, { forecast, histories, days });
     if (!payload) {
       response.status(503).json({ error: 'Todavía no hay una medición guardada disponible.' });
       return;
     }
     response.json(payload);
   },
+);
+
+exports.refreshPublicDisplayCache = onSchedule(
+  {
+    region: REGION,
+    schedule: 'every 60 minutes',
+    timeZone: 'America/Argentina/Buenos_Aires',
+    timeoutSeconds: 120,
+    memory: '512MiB',
+  },
+  () => refreshPublicDataCache(7),
+);
+
+exports.refreshPublicHistoryCache = onSchedule(
+  {
+    region: REGION,
+    schedule: '20 3 * * *',
+    timeZone: 'America/Argentina/Buenos_Aires',
+    timeoutSeconds: 300,
+    memory: '512MiB',
+  },
+  () => refreshPublicDataCache(365),
 );
 
 exports.cleanupInactiveChats = onSchedule(

@@ -4,10 +4,13 @@ const {
   normalizeAlertPreferences,
   normalizeAlertState,
 } = require('./alert-machine');
+const { mergeCompactRows } = require('./public-cache');
 
 function createFirestoreRepository({ db, FieldValue }) {
   const chats = db.collection('telegramChats');
   const velocityRef = db.collection('publicData').doc('velocity');
+  const forecastRef = db.collection('publicData').doc('forecast');
+  const publicHistory = db.collection('publicHistory');
   const alertMachineRef = db.collection('systemStatus').doc('alertMachine');
 
   async function touchChat(chat, command, { isStart = false } = {}) {
@@ -163,6 +166,36 @@ function createFirestoreRepository({ db, FieldValue }) {
     return snapshot.exists ? snapshot.data() : null;
   }
 
+  async function getPublicForecast() {
+    const snapshot = await forecastRef.get();
+    return snapshot.exists ? snapshot.data() : null;
+  }
+
+  async function getPublicHistories(siteCodes) {
+    const snapshots = await Promise.all(siteCodes.map((siteCode) => publicHistory.doc(String(siteCode)).get()));
+    return snapshots
+      .filter((snapshot) => snapshot.exists)
+      .map((snapshot) => ({ siteCode: Number(snapshot.id), ...snapshot.data() }));
+  }
+
+  async function setPublicForecast(rows) {
+    await forecastRef.set({ rows, updatedAt: FieldValue.serverTimestamp() });
+  }
+
+  async function mergePublicHistory(siteCode, incomingRows, now = new Date()) {
+    const ref = publicHistory.doc(String(siteCode));
+    return db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const rows = mergeCompactRows(snapshot.data()?.rows, incomingRows, now);
+      transaction.set(ref, {
+        siteCode: Number(siteCode),
+        rows,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return rows.length;
+    });
+  }
+
   async function setVelocityStatistics(statistics) {
     await velocityRef.set({
       statistics,
@@ -184,17 +217,21 @@ function createFirestoreRepository({ db, FieldValue }) {
 
   return {
     getChat,
+    getPublicForecast,
+    getPublicHistories,
     getVelocityData,
     claimObservation,
     claimDailySummary,
     listActiveChats,
     listDailySummaryChats,
+    mergePublicHistory,
     recordAlertsSent,
     saveAlertState,
     saveVelocityDetectionIfNew,
     setActive,
     setAlertPreference,
     setDailySummary,
+    setPublicForecast,
     setSystemStatus,
     setThreshold,
     setVelocityStatistics,

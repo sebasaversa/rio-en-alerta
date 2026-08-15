@@ -4,6 +4,14 @@ function observationTimestamp(value) {
   return Date.parse(normalized);
 }
 
+export function normalizeCachedSeriesRows(payload) {
+  const rows = Array.isArray(payload) ? payload : payload?.rows ?? [];
+  return rows
+    .map((row) => ({ date: row?.d ?? row?.date, value: Number(row?.v ?? row?.value) }))
+    .filter((row) => row.date && Number.isFinite(row.value) && Number.isFinite(observationTimestamp(row.date)))
+    .sort((left, right) => observationTimestamp(left.date) - observationTimestamp(right.date));
+}
+
 export function observationsFromPublicStatus(payload) {
   const current = payload?.current;
   if (!current) return [];

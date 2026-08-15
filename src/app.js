@@ -1,6 +1,6 @@
 import { buildHistoryCsv, historyChartRows, historyCsvFilename } from "./history.mjs";
 import { MIN_VIEWPORT_SPAN, isFullViewport, nearestRow, niceScale, normalizeViewport, panViewport, viewportTimestamps, zoomViewport } from "./chart-viewport.mjs";
-import { formatObservationAge, observationsFromPublicStatus } from "./public-status.mjs";
+import { formatObservationAge, normalizeCachedSeriesRows, observationsFromPublicStatus } from "./public-status.mjs";
 
 const API_BASE = "https://alerta.ina.gob.ar/pub/datos";
 const PUBLIC_STATUS_URL = "https://us-central1-rio-en-alerta-sanfernando.cloudfunctions.net/publicRiverStatus";
@@ -34,13 +34,15 @@ const elements = {
   velocityMethodology: document.querySelector("#velocity-methodology"),
   stationGrid: document.querySelector("#station-grid"),
   forecastGrid: document.querySelector("#forecast-grid"),
+  forecastCacheNote: document.querySelector("#forecast-cache-note"),
   historyRange: document.querySelector("#history-range"), historyDownload: document.querySelector("#history-download"), historyChart: document.querySelector("#history-chart"), historyLegend: document.querySelector("#history-legend"), historyList: document.querySelector("#history-list"), historySummary: document.querySelector("#history-summary"),
+  historyCacheNote: document.querySelector("#history-cache-note"),
   historyZoomIn: document.querySelector("#history-zoom-in"), historyZoomOut: document.querySelector("#history-zoom-out"), historyZoomReset: document.querySelector("#history-zoom-reset"), historyZoomStatus: document.querySelector("#history-zoom-status"),
   historyScaleDetail: document.querySelector("#history-scale-detail"), historyScaleFull: document.querySelector("#history-scale-full"), historyScaleNote: document.querySelector("#history-scale-note"), historyTooltip: document.querySelector("#history-chart-tooltip"), historyListTitle: document.querySelector("#history-list-title"),
 };
 
 let thresholds = { alert: 3, evacuation: 3.5 };
-let latest = { current: null, forecast: [], history: [] };
+let latest = { current: null, forecast: [], history: [], publicStatus: null };
 let historyDownloadUrl = null;
 let historyRequestId = 0;
 let historyChartModel = null;
@@ -104,9 +106,16 @@ function formatElapsed(hours) {
   return remaining ? `${wholeHours} h ${remaining} min` : `${wholeHours} h`;
 }
 
-function dayLabel(date, index) {
-  if (index === 0) return "Hoy";
-  if (index === 1) return "Mañana";
+function localDateKey(date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(date);
+}
+
+function dayLabel(date) {
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (localDateKey(date) === localDateKey(today)) return "Hoy";
+  if (localDateKey(date) === localDateKey(tomorrow)) return "Mañana";
   return new Intl.DateTimeFormat("es-AR", { weekday: "short", day: "numeric", month: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(date).replace(".", "");
 }
 
@@ -117,21 +126,21 @@ function stateFor(level) {
 }
 
 function normalizeObservations(payload) {
-  const data = payload?.data ?? payload?.values ?? payload ?? [];
+  const data = Array.isArray(payload) ? payload : payload?.data ?? payload?.values ?? [];
   return (Array.isArray(data) ? data : [])
     .map((item) => ({
-      date: item.timestart ?? item.fecha ?? item.time ?? item.date ?? item[0],
-      value: Number(item.valor ?? item.value ?? item.valor_num ?? item[1]),
+      date: item.timestart ?? item.fecha ?? item.time ?? item.date ?? item.d ?? item[0],
+      value: Number(item.valor ?? item.value ?? item.valor_num ?? item.v ?? item[1]),
     }))
     .filter((item) => item.date && Number.isFinite(item.value))
     .sort((a, b) => asDate(a.date) - asDate(b.date));
 }
 
 function normalizeForecast(payload) {
-  const candidates = payload?.data ?? payload?.values ?? payload?.pronosticos ?? payload ?? [];
+  const candidates = Array.isArray(payload) ? payload : payload?.data ?? payload?.values ?? payload?.pronosticos ?? [];
   const rows = Array.isArray(candidates) ? candidates.flatMap((item) => item?.pronosticos ?? item?.values ?? [item]) : [];
   return rows
-    .map((item) => ({ date: item.timestart ?? item.fecha ?? item.time ?? item.date ?? item[0], value: Number(item.valor ?? item.value ?? item[1]) }))
+    .map((item) => ({ date: item.timestart ?? item.fecha ?? item.time ?? item.date ?? item.d ?? item[0], value: Number(item.valor ?? item.value ?? item.v ?? item[1]) }))
     .filter((item) => item.date && Number.isFinite(item.value))
     .sort((a, b) => asDate(a.date) - asDate(b.date));
 }
@@ -155,8 +164,8 @@ async function getJson(resource, params) {
   return fetchJson(apiUrl(resource, params), "INA", 12000);
 }
 
-async function getPublicStatus() {
-  return fetchJson(PUBLIC_STATUS_URL, "El estado guardado", 8000);
+async function getPublicStatus(days = Number(elements.historyRange.value)) {
+  return fetchJson(`${PUBLIC_STATUS_URL}?days=${days}`, "El estado guardado", 8000);
 }
 
 function renderCurrent(observations) {
@@ -187,6 +196,15 @@ function showDataFreshness(message, isError = false) {
   elements.dataFreshness.hidden = !message;
   elements.dataFreshness.textContent = message;
   elements.dataFreshness.className = `data-freshness${isError ? " is-error" : ""}`;
+}
+
+function showCachedDataNote(element, message) {
+  element.hidden = !message;
+  element.textContent = message;
+}
+
+function cachedDataMessage(kind, updatedAt) {
+  return `Sin conexión con el INA. Mostrando ${kind} guardado, actualizado hace ${formatObservationAge(updatedAt)}.`;
 }
 
 function renderVelocityStatus(payload) {
@@ -221,7 +239,29 @@ function renderVelocityStatus(payload) {
   elements.velocityMethodology.textContent = `Indicador estadístico calculado por Río en Alerta con ${statistics.validIntervalCount} intervalos válidos (${period}). Percentil 90: ascenso ${formatLevel(statistics.p90Ascent)} m/h y descenso ${formatLevel(statistics.p90Descent)} m/h. Último cálculo: ${calculated}. El percentil 90 identifica el 10 % de las variaciones históricas más rápidas. No constituye una alerta oficial. Los niveles oficiales de San Fernando son 3,00 m para alerta y 3,50 m para evacuación.`;
 }
 
-async function loadObservedStations() {
+function cachedHistoryForStation(payload, siteCode) {
+  return payload?.histories?.find((history) => Number(history.siteCode) === Number(siteCode)) ?? null;
+}
+
+function stationCard(station, current, cachedAt = null) {
+  if (!current) return `<article class="station-card"><h3>${station.name}</h3><p class="station-river">${station.river}</p><p class="form-message">Medición no disponible.</p></article>`;
+  const cacheNote = cachedAt ? `<small class="station-cache">Información guardada · hace ${formatObservationAge(cachedAt)}</small>` : "";
+  return `<article class="station-card"><h3>${station.name}</h3><p class="station-river">${station.river}</p><strong class="station-level">${formatLevel(current.value)} m</strong><time class="station-time" datetime="${current.date}">${formatDate(current.date)}</time>${cacheNote}</article>`;
+}
+
+function renderCachedObservedStations(payload) {
+  let available = false;
+  const cards = OBSERVED_STATIONS.map((station) => {
+    const cached = cachedHistoryForStation(payload, station.siteCode);
+    const current = normalizeCachedSeriesRows(cached?.rows).at(-1);
+    available ||= Boolean(current);
+    return stationCard(station, current, current ? cached.updatedAt : null);
+  });
+  elements.stationGrid.innerHTML = cards.join("");
+  return available;
+}
+
+async function loadObservedStations(fallbackStatus = latest.publicStatus) {
   const end = new Date();
   const start = new Date(end); start.setDate(start.getDate() - 7);
   const request = (date) => date.toISOString().slice(0, 10);
@@ -232,10 +272,11 @@ async function loadObservedStations() {
       }));
       const current = rows.at(-1);
       if (!current) throw new Error("sin mediciones");
-      return `<article class="station-card"><h3>${station.name}</h3><p class="station-river">${station.river}</p><strong class="station-level">${formatLevel(current.value)} m</strong><time class="station-time" datetime="${current.date}">${formatDate(current.date)}</time></article>`;
+      return stationCard(station, current);
     } catch (error) {
       console.error(`No se pudo cargar ${station.name}`, error);
-      return `<article class="station-card"><h3>${station.name}</h3><p class="station-river">${station.river}</p><p class="form-message">Medición no disponible.</p></article>`;
+      const cached = cachedHistoryForStation(fallbackStatus, station.siteCode);
+      return stationCard(station, normalizeCachedSeriesRows(cached?.rows).at(-1), cached?.updatedAt);
     }
   }));
   elements.stationGrid.innerHTML = cards.join("");
@@ -254,12 +295,13 @@ function dailyForecast(forecast, current) {
   return days;
 }
 
-function renderForecast(forecast) {
+function renderForecast(forecast, { cachedAt = null } = {}) {
   const days = dailyForecast(forecast, latest.current);
   latest.forecast = days;
-  elements.forecastGrid.innerHTML = days.map((item, index) => {
+  showCachedDataNote(elements.forecastCacheNote, cachedAt ? cachedDataMessage("el último pronóstico", cachedAt) : "");
+  elements.forecastGrid.innerHTML = days.map((item) => {
     const state = stateFor(item.value);
-    return `<article class="forecast-day"><time datetime="${item.date}">${dayLabel(asDate(item.date), index)}</time><strong>${formatLevel(item.value)} m</strong><small>máximo estimado</small><span class="forecast-state ${state.className}">${state.label}</span></article>`;
+    return `<article class="forecast-day"><time datetime="${item.date}">${dayLabel(asDate(item.date))}</time><strong>${formatLevel(item.value)} m</strong><small>máximo estimado</small><span class="forecast-state ${state.className}">${state.label}</span></article>`;
   }).join("");
 }
 
@@ -275,6 +317,7 @@ async function refresh() {
   let cachedCurrentRendered = false;
   let liveCurrentRendered = false;
   const statusPromise = getPublicStatus().then((payload) => {
+    latest.publicStatus = payload;
     if (payload?.officialLevels) thresholds = payload.officialLevels;
     const cachedRows = observationsFromPublicStatus(payload);
     if (!liveCurrentRendered && cachedRows.length) {
@@ -326,14 +369,25 @@ async function refresh() {
     }
     if (forecastResult.status === "rejected") {
       console.error(forecastResult.reason);
-      elements.forecastGrid.innerHTML = `<p class="form-message">El pronóstico no está disponible en este momento.</p>`;
+      const cachedForecast = statusResult.status === "fulfilled" ? statusResult.value?.forecast : null;
+      const cachedRows = normalizeCachedSeriesRows(cachedForecast?.rows);
+      if (cachedRows.length) renderForecast(cachedRows, { cachedAt: cachedForecast.updatedAt });
+      else {
+        showCachedDataNote(elements.forecastCacheNote, "");
+        elements.forecastGrid.innerHTML = `<p class="form-message">El pronóstico no está disponible en este momento y todavía no hay una copia guardada.</p>`;
+      }
     }
     if (observedResult.status === "fulfilled") {
       loadHistory();
-      loadObservedStations();
+      loadObservedStations(statusResult.status === "fulfilled" ? statusResult.value : null);
     } else {
-      showHistoryUnavailable("Historial no disponible mientras no haya conexión con el INA.");
-      elements.stationGrid.innerHTML = `<p class="form-message">Mediciones comparativas no disponibles mientras no haya conexión con el INA.</p>`;
+      const status = statusResult.status === "fulfilled" ? statusResult.value : null;
+      if (!renderCachedHistory(status, Number(elements.historyRange.value))) {
+        showHistoryUnavailable("Historial no disponible: no hay conexión con el INA ni una copia guardada.");
+      }
+      if (!renderCachedObservedStations(status)) {
+        elements.stationGrid.innerHTML = `<p class="form-message">Mediciones comparativas no disponibles: no hay conexión con el INA ni una copia guardada.</p>`;
+      }
     }
   } finally {
     elements.refreshButton.disabled = false;
@@ -573,12 +627,60 @@ function showHistoryUnavailable(message) {
   historyChartModel = null;
   historyViewport = { start: 0, end: 1 };
   elements.historySummary.textContent = message;
+  showCachedDataNote(elements.historyCacheNote, "");
   elements.historyLegend.innerHTML = "";
   elements.historyChart.innerHTML = "";
   clearHistoryTooltip();
   elements.historyScaleNote.textContent = "";
   elements.historyList.innerHTML = "";
   updateHistoryZoomControls();
+}
+
+function historySeriesFromStatus(payload, days) {
+  return HISTORY_STATIONS.map((station) => {
+    const cached = cachedHistoryForStation(payload, station.siteCode);
+    const rows = normalizeCachedSeriesRows(cached?.rows);
+    return { ...station, rows, chartRows: historyChartRows(rows, days), updatedAt: cached?.updatedAt ?? null };
+  });
+}
+
+function oldestCacheUpdate(series) {
+  const timestamps = series
+    .map((item) => item.updatedAt)
+    .filter(Boolean)
+    .sort((left, right) => asDate(left) - asDate(right));
+  return timestamps[0] ?? null;
+}
+
+function renderHistorySeries(series, days, { cachedAt = null } = {}) {
+  const mainSeries = series.find((item) => item.siteCode === STATION.siteCode);
+  if (!mainSeries?.rows.length) return false;
+  const availableSeries = series.filter((item) => item.chartRows.length);
+  const chartRows = availableSeries.flatMap((item) => item.chartRows);
+  if (!chartRows.length) return false;
+  latest.history = mainSeries.rows;
+  setHistoryDownload(mainSeries.rows, days);
+  const values = mainSeries.rows.map((row) => row.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const chartValues = chartRows.map((row) => row.value);
+  const scaleMin = Math.min(0, ...chartValues);
+  const scaleMax = Math.max(thresholds.evacuation, ...chartValues);
+  const firstTimestamp = Math.min(...chartRows.map((row) => asDate(row.date).getTime()));
+  const lastTimestamp = Math.max(...chartRows.map((row) => asDate(row.date).getTime()));
+  historyChartModel = { availableSeries, mainSeries, scaleMin, scaleMax, days, firstTimestamp, lastTimestamp };
+  historyViewport = { start: 0, end: 1 };
+  renderHistoryChart();
+  elements.historyLegend.innerHTML = availableSeries.map((item) => `<span class="history-legend-item"><i style="background:${item.color}"></i>${item.name}</span>`).join("");
+  const resolution = days === 1 ? "mediciones horarias" : "promedios diarios";
+  elements.historySummary.textContent = `San Fernando: ${mainSeries.rows.length} mediciones · mínimo ${formatLevel(min)} m · máximo ${formatLevel(max)} m. Gráfico con ${resolution} de ${availableSeries.length} estaciones.`;
+  showCachedDataNote(elements.historyCacheNote, cachedAt ? cachedDataMessage("el último historial", cachedAt) : "");
+  return true;
+}
+
+function renderCachedHistory(payload, days) {
+  const series = historySeriesFromStatus(payload, days);
+  return renderHistorySeries(series, days, { cachedAt: oldestCacheUpdate(series) });
 }
 
 async function loadHistory() {
@@ -592,6 +694,7 @@ async function loadHistory() {
   historyChartModel = null;
   historyViewport = { start: 0, end: 1 };
   elements.historySummary.textContent = "Cargando historial y estaciones comparativas…";
+  showCachedDataNote(elements.historyCacheNote, "");
   elements.historyLegend.innerHTML = "";
   elements.historyChart.innerHTML = "";
   clearHistoryTooltip();
@@ -615,30 +718,19 @@ async function loadHistory() {
       }
     }));
     if (requestId !== historyRequestId) return;
-    const mainSeries = series.find((item) => item.siteCode === STATION.siteCode);
-    if (!mainSeries?.rows.length) throw new Error("El INA no devolvió mediciones históricas de San Fernando.");
-    const availableSeries = series.filter((item) => item.chartRows.length);
-    const chartRows = availableSeries.flatMap((item) => item.chartRows);
-    latest.history = mainSeries.rows;
-    setHistoryDownload(mainSeries.rows, days);
-    const values = mainSeries.rows.map((row) => row.value);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const chartValues = chartRows.map((row) => row.value);
-    const scaleMin = Math.min(0, ...chartValues);
-    const scaleMax = Math.max(thresholds.evacuation, ...chartValues);
-    const firstTimestamp = Math.min(...chartRows.map((row) => asDate(row.date).getTime()));
-    const lastTimestamp = Math.max(...chartRows.map((row) => asDate(row.date).getTime()));
-    historyChartModel = { availableSeries, mainSeries, scaleMin, scaleMax, days, firstTimestamp, lastTimestamp };
-    historyViewport = { start: 0, end: 1 };
-    renderHistoryChart();
-    elements.historyLegend.innerHTML = availableSeries.map((item) => `<span class="history-legend-item"><i style="background:${item.color}"></i>${item.name}</span>`).join("");
-    const resolution = days === 1 ? "mediciones horarias" : "promedios diarios";
-    elements.historySummary.textContent = `San Fernando: ${mainSeries.rows.length} mediciones · mínimo ${formatLevel(min)} m · máximo ${formatLevel(max)} m. Gráfico con ${resolution} de ${availableSeries.length} estaciones.`;
+    if (!renderHistorySeries(series, days)) throw new Error("El INA no devolvió mediciones históricas de San Fernando.");
   } catch (error) {
     if (requestId !== historyRequestId) return;
-    showHistoryUnavailable("No se pudo cargar el historial.");
     console.error(error);
+    try {
+      const cachedStatus = await getPublicStatus(days);
+      if (requestId !== historyRequestId) return;
+      latest.publicStatus = cachedStatus;
+      if (renderCachedHistory(cachedStatus, days)) return;
+    } catch (cacheError) {
+      console.error("No se pudo cargar el historial guardado", cacheError);
+    }
+    if (requestId === historyRequestId) showHistoryUnavailable("No se pudo cargar el historial y todavía no hay una copia guardada.");
   }
 }
 
