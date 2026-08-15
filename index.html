@@ -120,6 +120,56 @@
         <div class="forecast-grid" id="forecast-grid" aria-live="polite"></div>
       </section>
 
+      <section class="bot-section" aria-labelledby="bot-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Alertas por Telegram</p>
+            <h2 id="bot-title">Configurá el bot en pocos minutos</h2>
+          </div>
+          <p>Elegí tu altura máxima y qué avisos querés recibir. La configuración es individual para cada usuario.</p>
+        </div>
+
+        <div class="bot-guide card">
+          <div class="bot-guide-header">
+            <div>
+              <p class="card-label">Tigre · Río en Alerta</p>
+              <h3>Empezá desde Telegram</h3>
+              <p>El bot sólo puede enviarte mensajes después de que lo inicies.</p>
+            </div>
+            <a class="primary-button bot-link" href="https://t.me/TigreRioEnAlertaSF_bot" target="_blank" rel="noreferrer">Abrir el bot ↗</a>
+          </div>
+
+          <ol class="bot-steps">
+            <li>
+              <span class="bot-step-number" aria-hidden="true">1</span>
+              <div><strong>Iniciá el bot</strong><p>Tocá <em>Iniciar</em> en Telegram o enviá <code>/start</code> para activar tu usuario y ver la ayuda.</p></div>
+            </li>
+            <li>
+              <span class="bot-step-number" aria-hidden="true">2</span>
+              <div><strong>Elegí tu altura máxima</strong><p>Enviá, por ejemplo, <code>/maximo 2.50</code>. Podés consultar el valor guardado enviando sólo <code>/maximo</code>.</p></div>
+            </li>
+            <li>
+              <span class="bot-step-number" aria-hidden="true">3</span>
+              <div><strong>Personalizá tus avisos</strong><p>Enviá <code>/avisos</code> y usá los botones para activar altura máxima, crecida rápida, bajante rápida o recuperación.</p></div>
+            </li>
+          </ol>
+
+          <div class="bot-command-guide">
+            <h3>Comandos útiles</h3>
+            <dl class="bot-command-list">
+              <div><dt><code>/estado</code></dt><dd>Altura actual del Río Luján en San Fernando.</dd></div>
+              <div><dt><code>/pronostico</code></dt><dd>Mínimas y máximas previstas para los próximos días.</dd></div>
+              <div><dt><code>/historial 24h</code></dt><dd>Últimas mediciones. También acepta <code>7d</code> y <code>30d</code>.</dd></div>
+              <div><dt><code>/resumen activar</code></dt><dd>Resumen diario a las 08:00, hora de Argentina.</dd></div>
+              <div><dt><code>/pausar</code> · <code>/activar</code></dt><dd>Pausa o reactiva todos tus avisos automáticos.</dd></div>
+              <div><dt><code>/ayuda</code></dt><dd>Vuelve a mostrar la guía completa dentro del bot.</dd></div>
+            </dl>
+          </div>
+
+          <p class="bot-note">Las mediciones se revisan cada hora. Los avisos de crecida y bajante rápidas son indicadores estadísticos de Río en Alerta y no constituyen alertas oficiales del INA.</p>
+        </div>
+      </section>
+
       <footer>
         <p>Datos hidrométricos del <a href="https://alerta.ina.gob.ar/pub/gui/apibase" target="_blank" rel="noreferrer">Sistema de Información Hidrológica del INA</a>. Los valores son informativos; ante una emergencia, seguí a las autoridades locales.</p>
         <p class="admin-link"><a href="admin.html">Administración</a></p>
