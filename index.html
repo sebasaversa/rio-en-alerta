@@ -1,10 +1,19 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#083b4c" />
+    <meta name="theme-color" id="theme-color" content="#071b22" />
     <title>Río en Alerta | San Fernando</title>
+    <script>
+      (() => {
+        try {
+          if (localStorage.getItem("rio-en-alerta-theme") === "light") {
+            document.documentElement.dataset.theme = "light";
+          }
+        } catch { /* El modo oscuro sigue siendo el valor seguro por defecto. */ }
+      })();
+    </script>
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
@@ -14,9 +23,19 @@
           <span class="brand-mark" aria-hidden="true">≈</span>
           <span>Río en <strong>Alerta</strong></span>
         </a>
-        <div class="live-status" id="connection-status" role="status">
-          <span class="status-dot"></span>
-          <span>Actualizando datos</span>
+        <div class="topbar-actions">
+          <div class="live-status" id="connection-status" role="status">
+            <span class="status-dot"></span>
+            <span>Actualizando datos</span>
+          </div>
+          <label class="theme-control">
+            <span aria-hidden="true">◐</span>
+            <span class="visually-hidden">Tema visual</span>
+            <select id="theme-select" aria-label="Tema visual">
+              <option value="dark" selected>Oscuro</option>
+              <option value="light">Claro</option>
+            </select>
+          </label>
         </div>
       </header>
 

@@ -3,16 +3,18 @@ import { MIN_VIEWPORT_SPAN, isFullViewport, nearestRow, niceScale, normalizeView
 
 const API_BASE = "https://alerta.ina.gob.ar/pub/datos";
 const PUBLIC_STATUS_URL = "https://us-central1-rio-en-alerta-sanfernando.cloudfunctions.net/publicRiverStatus";
-const STATION = { siteCode: 52, seriesId: 52, varId: 2, name: "San Fernando", river: "Río Luján", color: "#075a70" };
+const STATION = { siteCode: 52, seriesId: 52, varId: 2, name: "San Fernando", river: "Río Luján", color: "var(--station-san-fernando)" };
 const HISTORY_STATIONS = [
   STATION,
-  { siteCode: 49, varId: 2, name: "Tigre", river: "Río Luján", color: "#d17c21" },
-  { siteCode: 50, varId: 2, name: "Dique Luján", river: "Río Luján", color: "#6c5aa7" },
-  { siteCode: 53, varId: 2, name: "San Isidro", river: "Río de la Plata", color: "#2f8a63" },
+  { siteCode: 49, varId: 2, name: "Tigre", river: "Río Luján", color: "var(--station-tigre)" },
+  { siteCode: 50, varId: 2, name: "Dique Luján", river: "Río Luján", color: "var(--station-dique)" },
+  { siteCode: 53, varId: 2, name: "San Isidro", river: "Río de la Plata", color: "var(--station-san-isidro)" },
 ];
 const OBSERVED_STATIONS = HISTORY_STATIONS.slice(1);
 
 const elements = {
+  themeSelect: document.querySelector("#theme-select"),
+  themeColor: document.querySelector("#theme-color"),
   connectionStatus: document.querySelector("#connection-status"),
   refreshButton: document.querySelector("#refresh-button"),
   currentLevel: document.querySelector("#current-level"),
@@ -43,6 +45,17 @@ let historyViewport = { start: 0, end: 1 };
 let historyScaleMode = "full";
 const historyPointers = new Map();
 let historyGesture = null;
+
+function setTheme(value, persist = true) {
+  const theme = value === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = theme;
+  elements.themeSelect.value = theme;
+  elements.themeColor.content = theme === "light" ? "#f6f1e7" : "#071b22";
+  if (!persist) return;
+  try {
+    localStorage.setItem("rio-en-alerta-theme", theme);
+  } catch { /* El selector sigue funcionando aunque el navegador bloquee el almacenamiento. */ }
+}
 
 function setHistoryDownload(rows, days) {
   if (historyDownloadUrl) URL.revokeObjectURL(historyDownloadUrl);
@@ -561,6 +574,7 @@ async function loadHistory() {
   }
 }
 
+elements.themeSelect.addEventListener("change", (event) => setTheme(event.target.value));
 elements.refreshButton.addEventListener("click", refresh);
 elements.historyRange.addEventListener("change", loadHistory);
 elements.historyZoomIn.addEventListener("click", () => setHistoryViewport(zoomViewport(historyViewport, 1.6, 0.5)));
@@ -598,4 +612,5 @@ elements.historyChart.addEventListener("keydown", (event) => {
   else return;
   event.preventDefault();
 });
+setTheme(document.documentElement.dataset.theme, false);
 refresh();
