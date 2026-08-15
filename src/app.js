@@ -1,5 +1,6 @@
 import { buildHistoryCsv, historyChartRows, historyCsvFilename } from "./history.mjs";
 import { MIN_VIEWPORT_SPAN, isFullViewport, nearestRow, niceScale, normalizeViewport, panViewport, viewportTimestamps, zoomViewport } from "./chart-viewport.mjs";
+import { formatObservationAge, observationsFromPublicStatus } from "./public-status.mjs";
 
 const API_BASE = "https://alerta.ina.gob.ar/pub/datos";
 const PUBLIC_STATUS_URL = "https://us-central1-rio-en-alerta-sanfernando.cloudfunctions.net/publicRiverStatus";
@@ -20,6 +21,7 @@ const elements = {
   refreshButton: document.querySelector("#refresh-button"),
   currentLevel: document.querySelector("#current-level"),
   observedAt: document.querySelector("#observed-at"),
+  dataFreshness: document.querySelector("#data-freshness"),
   levelState: document.querySelector("#level-state"),
   meterFill: document.querySelector("#meter-fill"),
   trendIndicator: document.querySelector("#trend-indicator"),
@@ -134,16 +136,27 @@ function normalizeForecast(payload) {
     .sort((a, b) => asDate(a.date) - asDate(b.date));
 }
 
+async function fetchJson(url, label, timeoutMs) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { headers: { Accept: "application/json" }, signal: controller.signal });
+    if (!response.ok) throw new Error(`${label} respondió ${response.status}`);
+    return response.json();
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error(`${label} no respondió dentro del tiempo esperado.`);
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 async function getJson(resource, params) {
-  const response = await fetch(apiUrl(resource, params), { headers: { Accept: "application/json" } });
-  if (!response.ok) throw new Error(`INA respondió ${response.status}`);
-  return response.json();
+  return fetchJson(apiUrl(resource, params), "INA", 12000);
 }
 
 async function getPublicStatus() {
-  const response = await fetch(PUBLIC_STATUS_URL, { headers: { Accept: "application/json" } });
-  if (!response.ok) throw new Error(`El indicador respondió ${response.status}`);
-  return response.json();
+  return fetchJson(PUBLIC_STATUS_URL, "El estado guardado", 8000);
 }
 
 function renderCurrent(observations) {
@@ -168,6 +181,12 @@ function renderCurrent(observations) {
   elements.trendSpeed.textContent = "Velocidad: calculando…";
   elements.trendAlertSpeed.textContent = "Velocidad de alerta estadística: calculando…";
   elements.trendNote.textContent = "Cargando el indicador estadístico.";
+}
+
+function showDataFreshness(message, isError = false) {
+  elements.dataFreshness.hidden = !message;
+  elements.dataFreshness.textContent = message;
+  elements.dataFreshness.className = `data-freshness${isError ? " is-error" : ""}`;
 }
 
 function renderVelocityStatus(payload) {
@@ -253,28 +272,69 @@ async function refresh() {
   const start = new Date(now); start.setDate(start.getDate() - 3);
   const end = new Date(now); end.setDate(end.getDate() + 5);
   const request = (date) => date.toISOString().slice(0, 10);
-  try {
-    const [observedPayload, forecastPayload] = await Promise.all([
-      getJson("datos", { timeStart: request(start), timeEnd: request(now), siteCode: STATION.siteCode, varId: STATION.varId, format: "json" }),
-      getJson("datosProno", { timeStart: request(now), timeEnd: request(end), seriesId: 26202, calId: 432, siteCode: STATION.siteCode, varId: STATION.varId, all: "false", format: "json" }),
-    ]);
-    renderCurrent(normalizeObservations(observedPayload));
-    renderForecast(normalizeForecast(forecastPayload));
+  let cachedCurrentRendered = false;
+  let liveCurrentRendered = false;
+  const statusPromise = getPublicStatus().then((payload) => {
+    if (payload?.officialLevels) thresholds = payload.officialLevels;
+    const cachedRows = observationsFromPublicStatus(payload);
+    if (!liveCurrentRendered && cachedRows.length) {
+      renderCurrent(cachedRows);
+      cachedCurrentRendered = true;
+      elements.connectionStatus.lastElementChild.textContent = "Último dato guardado";
+      showDataFreshness(`Mostrando la última medición guardada, de hace ${formatObservationAge(cachedRows.at(-1).date)}, mientras consultamos al INA.`);
+    }
+    renderVelocityStatus(payload);
+    return payload;
+  });
+  const observedPromise = getJson("datos", {
+    timeStart: request(start), timeEnd: request(now), siteCode: STATION.siteCode, varId: STATION.varId, format: "json",
+  }).then((payload) => {
+    renderCurrent(normalizeObservations(payload));
+    liveCurrentRendered = true;
+    showDataFreshness("");
     elements.connectionStatus.className = "live-status is-live";
     elements.connectionStatus.lastElementChild.textContent = "Datos actualizados";
-    getPublicStatus().then(renderVelocityStatus).catch((error) => {
-      console.error(error);
-      renderVelocityStatus(null);
-    });
-    loadHistory();
-    loadObservedStations();
-  } catch (error) {
-    elements.connectionStatus.className = "live-status has-error";
-    elements.connectionStatus.lastElementChild.textContent = "No se pudo actualizar";
-    elements.observedAt.textContent = "No pudimos consultar el INA. Probá actualizar nuevamente.";
-    elements.forecastGrid.innerHTML = `<p class="form-message">El pronóstico no está disponible en este momento.</p>`;
-    elements.stationGrid.innerHTML = `<p class="form-message">Las estaciones comparativas no están disponibles en este momento.</p>`;
-    console.error(error);
+    return payload;
+  });
+  const forecastPromise = getJson("datosProno", {
+    timeStart: request(now), timeEnd: request(end), seriesId: 26202, calId: 432, siteCode: STATION.siteCode, varId: STATION.varId, all: "false", format: "json",
+  }).then((payload) => {
+    renderForecast(normalizeForecast(payload));
+    return payload;
+  });
+  try {
+    const [statusResult, observedResult, forecastResult] = await Promise.allSettled([
+      statusPromise, observedPromise, forecastPromise,
+    ]);
+    if (statusResult.status === "rejected") {
+      console.error(statusResult.reason);
+      if (liveCurrentRendered) renderVelocityStatus(null);
+    }
+    if (observedResult.status === "rejected") {
+      console.error(observedResult.reason);
+      if (cachedCurrentRendered) {
+        elements.connectionStatus.className = "live-status";
+        elements.connectionStatus.lastElementChild.textContent = "Último dato guardado";
+        const cachedDate = observationsFromPublicStatus(statusResult.status === "fulfilled" ? statusResult.value : null).at(-1)?.date;
+        showDataFreshness(`No pudimos conectar con el INA. Mostrando la última medición guardada, de hace ${formatObservationAge(cachedDate)}.`, true);
+      } else {
+        elements.connectionStatus.className = "live-status has-error";
+        elements.connectionStatus.lastElementChild.textContent = "No se pudo actualizar";
+        elements.observedAt.textContent = "No pudimos consultar el INA. Probá actualizar nuevamente.";
+        showDataFreshness("No hay conexión con el INA y tampoco hay una medición guardada disponible.", true);
+      }
+    }
+    if (forecastResult.status === "rejected") {
+      console.error(forecastResult.reason);
+      elements.forecastGrid.innerHTML = `<p class="form-message">El pronóstico no está disponible en este momento.</p>`;
+    }
+    if (observedResult.status === "fulfilled") {
+      loadHistory();
+      loadObservedStations();
+    } else {
+      showHistoryUnavailable("Historial no disponible mientras no haya conexión con el INA.");
+      elements.stationGrid.innerHTML = `<p class="form-message">Mediciones comparativas no disponibles mientras no haya conexión con el INA.</p>`;
+    }
   } finally {
     elements.refreshButton.disabled = false;
     elements.refreshButton.textContent = "↻ Actualizar ahora";
@@ -506,6 +566,21 @@ function endHistoryPointer(event) {
   }
 }
 
+function showHistoryUnavailable(message) {
+  historyRequestId += 1;
+  setHistoryDownload([], Number(elements.historyRange.value));
+  latest.history = [];
+  historyChartModel = null;
+  historyViewport = { start: 0, end: 1 };
+  elements.historySummary.textContent = message;
+  elements.historyLegend.innerHTML = "";
+  elements.historyChart.innerHTML = "";
+  clearHistoryTooltip();
+  elements.historyScaleNote.textContent = "";
+  elements.historyList.innerHTML = "";
+  updateHistoryZoomControls();
+}
+
 async function loadHistory() {
   const requestId = ++historyRequestId;
   const days = Number(elements.historyRange.value);
@@ -562,15 +637,7 @@ async function loadHistory() {
     elements.historySummary.textContent = `San Fernando: ${mainSeries.rows.length} mediciones · mínimo ${formatLevel(min)} m · máximo ${formatLevel(max)} m. Gráfico con ${resolution} de ${availableSeries.length} estaciones.`;
   } catch (error) {
     if (requestId !== historyRequestId) return;
-    elements.historySummary.textContent = "No se pudo cargar el historial.";
-    historyChartModel = null;
-    historyViewport = { start: 0, end: 1 };
-    elements.historyLegend.innerHTML = "";
-    elements.historyChart.innerHTML = "";
-    clearHistoryTooltip();
-    elements.historyScaleNote.textContent = "";
-    elements.historyList.innerHTML = "";
-    updateHistoryZoomControls();
+    showHistoryUnavailable("No se pudo cargar el historial.");
     console.error(error);
   }
 }

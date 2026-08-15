@@ -7,6 +7,7 @@ const { FieldValue, Timestamp, getFirestore } = require('firebase-admin/firestor
 const { COMMANDS, MAIN_KEYBOARD, createBotCore } = require('./bot-core');
 const { createFirestoreRepository } = require('./firestore-repository');
 const { currentObservation, forecastUrl, observationUrl } = require('./lib');
+const { buildPublicStatusPayload } = require('./public-status');
 const { createTelegramClient } = require('./telegram-client');
 const { calculateCurrentVelocity, calculateVelocityStatistics } = require('./velocity');
 
@@ -54,13 +55,6 @@ function argentinaDateKey(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Argentina/Buenos_Aires',
   }).format(date);
-}
-
-function timestampIso(value) {
-  if (!value) return null;
-  if (typeof value.toDate === 'function') return value.toDate().toISOString();
-  if (value instanceof Date) return value.toISOString();
-  return String(value);
 }
 
 const repository = createFirestoreRepository({ db, FieldValue });
@@ -187,19 +181,12 @@ exports.publicRiverStatus = onRequest(
       response.sendStatus(405);
       return;
     }
-    const [velocityData, recentPayload] = await Promise.all([
-      repository.getVelocityData(),
-      getJson(observationUrl()),
-    ]);
-    const freshCurrent = calculateCurrentVelocity(recentPayload, velocityData?.statistics);
-    response.json({
-      station: { siteCode: 52, name: 'San Fernando', river: 'Río Luján' },
-      officialLevels: { alert: 3, evacuation: 3.5 },
-      statistics: velocityData?.statistics ?? null,
-      current: freshCurrent,
-      calculatedAt: timestampIso(velocityData?.calculatedAt),
-      updatedAt: timestampIso(velocityData?.updatedAt),
-    });
+    const payload = buildPublicStatusPayload(await repository.getVelocityData());
+    if (!payload) {
+      response.status(503).json({ error: 'Todavía no hay una medición guardada disponible.' });
+      return;
+    }
+    response.json(payload);
   },
 );
 
