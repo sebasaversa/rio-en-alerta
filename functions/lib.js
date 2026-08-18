@@ -9,6 +9,7 @@ const FORECAST = Object.freeze({ seriesId: 26202, calId: 432 });
 const API_BASE = 'https://alerta.ina.gob.ar/pub/datos';
 const MAX_THRESHOLD = 6;
 const DEFAULT_THRESHOLD = 2.5;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function dateParam(date) {
   return date.toISOString().slice(0, 10);
@@ -23,10 +24,12 @@ function observationUrl(now = new Date(), days = 3) {
 }
 
 function stationObservationUrl(station, now = new Date(), days = 3) {
-  const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  const start = new Date(now.getTime() - days * DAY_MS);
   return buildInaUrl('datos', {
     timeStart: dateParam(start),
-    timeEnd: dateParam(now),
+    // La API del INA trata timeEnd como las 00:00 de ese día: sumamos un día
+    // para que la ventana incluya las mediciones de hoy hasta el momento actual.
+    timeEnd: dateParam(new Date(now.getTime() + DAY_MS)),
     siteCode: station.siteCode,
     varId: station.varId,
     format: 'json',

@@ -3,6 +3,10 @@ import { MIN_VIEWPORT_SPAN, isFullViewport, nearestRow, niceScale, normalizeView
 import { formatObservationAge, normalizeCachedSeriesRows, observationsFromPublicStatus } from "./public-status.mjs";
 
 const API_BASE = "https://alerta.ina.gob.ar/pub/datos";
+const DAY_MS = 24 * 60 * 60 * 1000;
+// La API del INA interpreta timeEnd=YYYY-MM-DD como las 00:00 de ese día:
+// sumamos un día para que la ventana incluya las mediciones de hoy hasta ahora.
+const inaTimeEnd = (date) => new Date(date.getTime() + DAY_MS).toISOString().slice(0, 10);
 const PUBLIC_STATUS_URL = "https://us-central1-rio-en-alerta-sanfernando.cloudfunctions.net/publicRiverStatus";
 const STATION = { siteCode: 52, seriesId: 52, varId: 2, name: "San Fernando", river: "Río Luján", color: "var(--station-san-fernando)" };
 const HISTORY_STATIONS = [
@@ -43,6 +47,9 @@ const elements = {
 
 let thresholds = { alert: 3, evacuation: 3.5 };
 let latest = { current: null, forecast: [], history: [], publicStatus: null };
+let lastRefreshAt = 0;
+let autoRefreshIntervalId = null;
+const AUTO_REFRESH_MS = 60 * 60 * 1000;
 let historyDownloadUrl = null;
 let historyRequestId = 0;
 let historyChartModel = null;
@@ -268,7 +275,7 @@ async function loadObservedStations(fallbackStatus = latest.publicStatus) {
   const cards = await Promise.all(OBSERVED_STATIONS.map(async (station) => {
     try {
       const rows = normalizeObservations(await getJson("datos", {
-        timeStart: request(start), timeEnd: request(end), siteCode: station.siteCode, varId: station.varId, format: "json",
+        timeStart: request(start), timeEnd: inaTimeEnd(end), siteCode: station.siteCode, varId: station.varId, format: "json",
       }));
       const current = rows.at(-1);
       if (!current) throw new Error("sin mediciones");
@@ -306,6 +313,7 @@ function renderForecast(forecast, { cachedAt = null } = {}) {
 }
 
 async function refresh() {
+  lastRefreshAt = Date.now();
   elements.refreshButton.disabled = true;
   elements.refreshButton.textContent = "Actualizando…";
   elements.connectionStatus.className = "live-status";
@@ -330,7 +338,7 @@ async function refresh() {
     return payload;
   });
   const observedPromise = getJson("datos", {
-    timeStart: request(start), timeEnd: request(now), siteCode: STATION.siteCode, varId: STATION.varId, format: "json",
+    timeStart: request(start), timeEnd: inaTimeEnd(now), siteCode: STATION.siteCode, varId: STATION.varId, format: "json",
   }).then((payload) => {
     renderCurrent(normalizeObservations(payload));
     liveCurrentRendered = true;
@@ -706,7 +714,7 @@ async function loadHistory() {
       try {
         const rows = normalizeObservations(await getJson("datos", {
           timeStart: start.toISOString().slice(0, 10),
-          timeEnd: end.toISOString().slice(0, 10),
+          timeEnd: inaTimeEnd(end),
           siteCode: station.siteCode,
           varId: station.varId,
           format: "json",
@@ -777,4 +785,26 @@ elements.historyChart.addEventListener("keydown", (event) => {
   event.preventDefault();
 });
 setTheme(document.documentElement.dataset.theme, false);
+
+function startAutoRefresh() {
+  if (autoRefreshIntervalId) return;
+  autoRefreshIntervalId = setInterval(refresh, AUTO_REFRESH_MS);
+}
+
+function stopAutoRefresh() {
+  if (!autoRefreshIntervalId) return;
+  clearInterval(autoRefreshIntervalId);
+  autoRefreshIntervalId = null;
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopAutoRefresh();
+    return;
+  }
+  if (Date.now() - lastRefreshAt >= AUTO_REFRESH_MS) refresh();
+  startAutoRefresh();
+});
+
 refresh();
+startAutoRefresh();

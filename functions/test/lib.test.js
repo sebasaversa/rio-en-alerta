@@ -28,9 +28,11 @@ test('normaliza y ordena observaciones de más antigua a más reciente', () => {
   assert.equal(currentObservation(payload).value, 0.95);
 });
 
-test('mantiene la sintaxis especial de la API del INA', () => {
+test('mantiene la sintaxis especial de la API del INA y extiende timeEnd un día', () => {
+  // La API del INA interpreta timeEnd=YYYY-MM-DD como las 00:00 de ese día,
+  // por lo que sumamos un día para que la ventana incluya las mediciones de hoy.
   const url = observationUrl(new Date('2026-08-13T12:00:00Z'), 1);
-  assert.match(url, /\/datos&timeStart=2026-08-12&timeEnd=2026-08-13/);
+  assert.match(url, /\/datos&timeStart=2026-08-12&timeEnd=2026-08-14/);
   assert.match(url, /siteCode=52/);
   assert.doesNotMatch(url, /\/datos\?/);
   assert.match(stationObservationUrl({ siteCode: 49, varId: 2 }, new Date('2026-08-13T12:00:00Z'), 7), /siteCode=49/);
