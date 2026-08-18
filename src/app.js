@@ -25,6 +25,7 @@ const elements = {
   backToTop: document.querySelector("#back-to-top"),
   connectionStatus: document.querySelector("#connection-status"),
   refreshButton: document.querySelector("#refresh-button"),
+  levelCard: document.querySelector(".level-card"),
   currentLevel: document.querySelector("#current-level"),
   observedAt: document.querySelector("#observed-at"),
   dataFreshness: document.querySelector("#data-freshness"),
@@ -194,10 +195,21 @@ async function getPublicStatus(days = Number(elements.historyRange.value)) {
   return fetchJson(`${PUBLIC_STATUS_URL}?days=${days}`, "El estado guardado", 8000);
 }
 
+function showCurrentLoading() {
+  elements.levelCard.classList.add("is-loading");
+  elements.currentLevel.textContent = "···";
+  elements.levelState.textContent = "Actualizando";
+  elements.levelState.className = "pill";
+  elements.observedAt.textContent = "Consultando al INA…";
+  elements.meterFill.style.width = "30%";
+  showDataFreshness("");
+}
+
 function renderCurrent(observations) {
   const current = observations.at(-1);
   const previous = observations.at(-2);
   if (!current) throw new Error("La API no devolvió lecturas para esta estación.");
+  elements.levelCard.classList.remove("is-loading");
   latest.current = current;
   const state = stateFor(current.value);
   const delta = previous ? current.value - previous.value : 0;
@@ -339,22 +351,15 @@ async function refresh() {
   elements.refreshButton.textContent = "Actualizando…";
   elements.connectionStatus.className = "live-status";
   elements.connectionStatus.lastElementChild.textContent = "Consultando INA";
+  showCurrentLoading();
   const now = new Date();
   const start = new Date(now); start.setDate(start.getDate() - 3);
   const end = new Date(now); end.setDate(end.getDate() + 5);
   const request = (date) => date.toISOString().slice(0, 10);
-  let cachedCurrentRendered = false;
   let liveCurrentRendered = false;
   const statusPromise = getPublicStatus().then((payload) => {
     latest.publicStatus = payload;
     if (payload?.officialLevels) thresholds = payload.officialLevels;
-    const cachedRows = observationsFromPublicStatus(payload);
-    if (!liveCurrentRendered && cachedRows.length) {
-      renderCurrent(cachedRows);
-      cachedCurrentRendered = true;
-      elements.connectionStatus.lastElementChild.textContent = "Último dato guardado";
-      showDataFreshness(`Mostrando la última medición guardada, de hace ${formatObservationAge(cachedRows.at(-1).date)}, mientras consultamos al INA.`);
-    }
     renderVelocityStatus(payload);
     return payload;
   });
@@ -384,12 +389,18 @@ async function refresh() {
     }
     if (observedResult.status === "rejected") {
       console.error(observedResult.reason);
-      if (cachedCurrentRendered) {
+      const status = statusResult.status === "fulfilled" ? statusResult.value : null;
+      const cachedRows = observationsFromPublicStatus(status);
+      if (cachedRows.length) {
+        renderCurrent(cachedRows);
         elements.connectionStatus.className = "live-status";
         elements.connectionStatus.lastElementChild.textContent = "Último dato guardado";
-        const cachedDate = observationsFromPublicStatus(statusResult.status === "fulfilled" ? statusResult.value : null).at(-1)?.date;
-        showDataFreshness(`No pudimos conectar con el INA. Mostrando la última medición guardada, de hace ${formatObservationAge(cachedDate)}.`, true);
+        showDataFreshness(`No pudimos conectar con el INA. Mostrando la última medición guardada, de hace ${formatObservationAge(cachedRows.at(-1).date)}.`, true);
       } else {
+        elements.levelCard.classList.remove("is-loading");
+        elements.currentLevel.textContent = "—";
+        elements.levelState.textContent = "Sin datos";
+        elements.levelState.className = "pill";
         elements.connectionStatus.className = "live-status has-error";
         elements.connectionStatus.lastElementChild.textContent = "No se pudo actualizar";
         elements.observedAt.textContent = "No pudimos consultar el INA. Probá actualizar nuevamente.";

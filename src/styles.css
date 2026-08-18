@@ -123,6 +123,20 @@ h2 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size
 .river-meter { height: 12px; overflow: hidden; border-radius: 20px; background: var(--meter-track); }
 .river-meter span { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, #3da3ad, var(--ocean)); transition: width .7s ease; }
 .meter-caption { margin: 11px 0 0; color: var(--muted); font-size: .82rem; }
+
+@keyframes pulse-loading { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+.level-card.is-loading .level-reading strong { color: var(--muted); }
+.level-card.is-loading .level-reading,
+.level-card.is-loading #level-state,
+.level-card.is-loading .river-meter span {
+  animation: pulse-loading 1.3s ease-in-out infinite;
+}
+.level-card.is-loading .river-meter span { background: var(--meter-track); }
+@media (prefers-reduced-motion: reduce) {
+  .level-card.is-loading .level-reading,
+  .level-card.is-loading #level-state,
+  .level-card.is-loading .river-meter span { animation: none; }
+}
 .meter-caption strong { color: var(--ink); }
 .trend-card { display: flex; flex-direction: column; padding: 28px 30px; background: var(--trend-bg); color: white; }
 .trend-card .card-label { color: var(--aqua); }
