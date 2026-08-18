@@ -43,7 +43,7 @@ const elements = {
   forecastGrid: document.querySelector("#forecast-grid"),
   forecastCacheNote: document.querySelector("#forecast-cache-note"),
   forecastIssuedNote: document.querySelector("#forecast-issued-note"),
-  historyRange: document.querySelector("#history-range"), historyDownload: document.querySelector("#history-download"), historyChart: document.querySelector("#history-chart"), historyLegend: document.querySelector("#history-legend"), historyList: document.querySelector("#history-list"), historySummary: document.querySelector("#history-summary"),
+  historyRange: document.querySelector("#history-range"), historyAggregation: document.querySelector("#history-aggregation"), historyDownload: document.querySelector("#history-download"), historyChart: document.querySelector("#history-chart"), historyLegend: document.querySelector("#history-legend"), historyList: document.querySelector("#history-list"), historySummary: document.querySelector("#history-summary"),
   historyCacheNote: document.querySelector("#history-cache-note"),
   historyZoomIn: document.querySelector("#history-zoom-in"), historyZoomOut: document.querySelector("#history-zoom-out"), historyZoomReset: document.querySelector("#history-zoom-reset"), historyZoomStatus: document.querySelector("#history-zoom-status"),
   historyScaleDetail: document.querySelector("#history-scale-detail"), historyScaleFull: document.querySelector("#history-scale-full"), historyScaleNote: document.querySelector("#history-scale-note"), historyTooltip: document.querySelector("#history-chart-tooltip"), historyListTitle: document.querySelector("#history-list-title"),
@@ -486,14 +486,15 @@ function clearHistoryTooltip() {
 }
 
 function renderVisibleHistoryList(visible) {
-  const { mainSeries, days } = historyChartModel;
+  const { mainSeries, days, aggregation } = historyChartModel;
   const rows = mainSeries.chartRows.filter((row) => {
     const timestamp = asDate(row.date).getTime();
     return timestamp >= visible.start && timestamp <= visible.end;
   }).slice(-4);
+  const sampleLabel = aggregation === "maximum" ? "Máximo de" : "Promedio de";
   elements.historyListTitle.textContent = "San Fernando · valores más recientes del período visible";
   elements.historyList.innerHTML = rows.length
-    ? rows.map((row) => `<div class="history-item">${historyCompact(row, days)}<strong>${formatLevel(row.value)} m</strong>${row.samples ? `<small>Promedio de ${row.samples} mediciones</small>` : ""}</div>`).join("")
+    ? rows.map((row) => `<div class="history-item">${historyCompact(row, days)}<strong>${formatLevel(row.value)} m</strong>${row.samples ? `<small>${sampleLabel} ${row.samples} mediciones</small>` : ""}</div>`).join("")
     : `<p class="form-message">No hay mediciones de San Fernando dentro de este período.</p>`;
 }
 
@@ -681,7 +682,7 @@ function historySeriesFromStatus(payload, days) {
   return HISTORY_STATIONS.map((station) => {
     const cached = cachedHistoryForStation(payload, station.siteCode);
     const rows = normalizeCachedSeriesRows(cached?.rows);
-    return { ...station, rows, chartRows: historyChartRows(rows, days), updatedAt: cached?.updatedAt ?? null };
+    return { ...station, rows, chartRows: historyChartRows(rows, days, elements.historyAggregation.value), updatedAt: cached?.updatedAt ?? null };
   });
 }
 
@@ -709,11 +710,11 @@ function renderHistorySeries(series, days, { cachedAt = null } = {}) {
   const scaleMax = Math.max(thresholds.evacuation, ...chartValues);
   const firstTimestamp = Math.min(...chartRows.map((row) => asDate(row.date).getTime()));
   const lastTimestamp = Math.max(...chartRows.map((row) => asDate(row.date).getTime()));
-  historyChartModel = { availableSeries, mainSeries, scaleMin, scaleMax, days, firstTimestamp, lastTimestamp };
+  historyChartModel = { availableSeries, mainSeries, scaleMin, scaleMax, days, firstTimestamp, lastTimestamp, aggregation: elements.historyAggregation.value };
   historyViewport = { start: 0, end: 1 };
   renderHistoryChart();
   elements.historyLegend.innerHTML = availableSeries.map((item) => `<span class="history-legend-item"><i style="background:${item.color}"></i>${item.name}</span>`).join("");
-  const resolution = days === 1 ? "mediciones horarias" : "promedios diarios";
+  const resolution = days === 1 ? "mediciones horarias" : elements.historyAggregation.value === "maximum" ? "máximos diarios" : "promedios diarios";
   elements.historySummary.textContent = `San Fernando: ${mainSeries.rows.length} mediciones · mínimo ${formatLevel(min)} m · máximo ${formatLevel(max)} m. Gráfico con ${resolution} de ${availableSeries.length} estaciones.`;
   showCachedDataNote(elements.historyCacheNote, cachedAt ? cachedDataMessage("el último historial", cachedAt) : "");
   return true;
@@ -727,6 +728,7 @@ function renderCachedHistory(payload, days) {
 async function loadHistory() {
   const requestId = ++historyRequestId;
   const days = Number(elements.historyRange.value);
+  elements.historyAggregation.disabled = days === 1;
   const end = new Date();
   const start = new Date(end);
   start.setDate(start.getDate() - days);
@@ -752,7 +754,7 @@ async function loadHistory() {
           varId: station.varId,
           format: "json",
         }));
-        return { ...station, rows, chartRows: historyChartRows(rows, days) };
+        return { ...station, rows, chartRows: historyChartRows(rows, days, elements.historyAggregation.value) };
       } catch (error) {
         console.error(`No se pudo cargar el historial de ${station.name}`, error);
         return { ...station, rows: [], chartRows: [], error };
@@ -782,6 +784,7 @@ window.addEventListener("scroll", () => {
 }, { passive: true });
 elements.refreshButton.addEventListener("click", refresh);
 elements.historyRange.addEventListener("change", loadHistory);
+elements.historyAggregation.addEventListener("change", loadHistory);
 elements.historyZoomIn.addEventListener("click", () => setHistoryViewport(zoomViewport(historyViewport, 1.6, 0.5)));
 elements.historyZoomOut.addEventListener("click", () => setHistoryViewport(zoomViewport(historyViewport, 1 / 1.6, 0.5)));
 elements.historyZoomReset.addEventListener("click", () => setHistoryViewport({ start: 0, end: 1 }));

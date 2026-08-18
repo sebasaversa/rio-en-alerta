@@ -52,3 +52,30 @@ test('mantiene mediciones horarias y usa promedios para rangos de varios días',
     { date: '2026-08-14T15:00:00Z', value: 1.5, samples: 2 },
   ]);
 });
+
+test('calcula máximos diarios en Argentina y descarta filas inválidas', async () => {
+  const { dailyMaximum } = await import('../../src/history.mjs');
+  const rows = dailyMaximum([
+    { date: '2026-08-14T05:00:00Z', value: 1 },
+    { date: '2026-08-14T08:00:00Z', value: 2 },
+    { date: '2026-08-15T04:00:00Z', value: 3 },
+    { date: 'fecha-invalida', value: 99 },
+  ]);
+
+  assert.deepEqual(rows, [
+    { date: '2026-08-14T15:00:00Z', value: 2, samples: 2 },
+    { date: '2026-08-15T15:00:00Z', value: 3, samples: 1 },
+  ]);
+});
+
+test('usa el máximo diario en el gráfico cuando se pide esa agregación', async () => {
+  const { historyChartRows } = await import('../../src/history.mjs');
+  const source = [
+    { date: '2026-08-14T09:00:00Z', value: 2 },
+    { date: '2026-08-14T08:00:00Z', value: 1 },
+  ];
+
+  assert.deepEqual(historyChartRows(source, 30, 'maximum'), [
+    { date: '2026-08-14T15:00:00Z', value: 2, samples: 2 },
+  ]);
+});

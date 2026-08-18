@@ -34,12 +34,33 @@ export function dailyAverage(rows, timeZone = 'America/Argentina/Buenos_Aires') 
   }));
 }
 
-export function historyChartRows(rows, days) {
+export function dailyMaximum(rows, timeZone = 'America/Argentina/Buenos_Aires') {
+  const dayFormatter = new Intl.DateTimeFormat('en-CA', { timeZone });
+  const grouped = new Map();
+  for (const row of rows) {
+    const milliseconds = timestampMs(row?.date);
+    const value = Number(row?.value);
+    if (!Number.isFinite(milliseconds) || !Number.isFinite(value)) continue;
+    const key = dayFormatter.format(new Date(milliseconds));
+    const current = grouped.get(key) ?? { value: -Infinity, samples: 0 };
+    current.samples += 1;
+    if (value > current.value) current.value = value;
+    grouped.set(key, current);
+  }
+  return [...grouped.entries()].map(([day, data]) => ({
+    date: `${day}T15:00:00Z`,
+    value: data.value,
+    samples: data.samples,
+  }));
+}
+
+export function historyChartRows(rows, days, aggregation = 'average') {
   const valid = rows
     .filter((row) => Number.isFinite(timestampMs(row?.date)) && Number.isFinite(Number(row?.value)))
     .map((row) => ({ ...row, value: Number(row.value) }))
     .sort((left, right) => timestampMs(left.date) - timestampMs(right.date));
-  return Number(days) === 1 ? valid : dailyAverage(valid);
+  if (Number(days) === 1) return valid;
+  return aggregation === 'maximum' ? dailyMaximum(valid) : dailyAverage(valid);
 }
 
 export function buildHistoryCsv(rows, options = {}) {
