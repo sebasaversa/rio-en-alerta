@@ -9,11 +9,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const inaTimeEnd = (date) => new Date(date.getTime() + DAY_MS).toISOString().slice(0, 10);
 const PUBLIC_STATUS_URL = "https://us-central1-rio-en-alerta-sanfernando.cloudfunctions.net/publicRiverStatus";
 const STATION = { siteCode: 52, seriesId: 52, varId: 2, name: "San Fernando", river: "Río Luján", color: "var(--station-san-fernando)" };
+// El INA publica Tigre, Dique Luján y San Isidro con una sola lectura por día
+// (escala de lectura manual), a diferencia de San Fernando que reporta cada hora.
 const HISTORY_STATIONS = [
   STATION,
-  { siteCode: 49, varId: 2, name: "Tigre", river: "Río Luján", color: "var(--station-tigre)" },
-  { siteCode: 50, varId: 2, name: "Dique Luján", river: "Río Luján", color: "var(--station-dique)" },
-  { siteCode: 53, varId: 2, name: "San Isidro", river: "Río de la Plata", color: "var(--station-san-isidro)" },
+  { siteCode: 49, varId: 2, name: "Tigre", river: "Río Luján", color: "var(--station-tigre)", dailyUpdate: true },
+  { siteCode: 50, varId: 2, name: "Dique Luján", river: "Río Luján", color: "var(--station-dique)", dailyUpdate: true },
+  { siteCode: 53, varId: 2, name: "San Isidro", river: "Río de la Plata", color: "var(--station-san-isidro)", dailyUpdate: true },
 ];
 const OBSERVED_STATIONS = HISTORY_STATIONS.slice(1);
 
@@ -39,6 +41,7 @@ const elements = {
   stationGrid: document.querySelector("#station-grid"),
   forecastGrid: document.querySelector("#forecast-grid"),
   forecastCacheNote: document.querySelector("#forecast-cache-note"),
+  forecastIssuedNote: document.querySelector("#forecast-issued-note"),
   historyRange: document.querySelector("#history-range"), historyDownload: document.querySelector("#history-download"), historyChart: document.querySelector("#history-chart"), historyLegend: document.querySelector("#history-legend"), historyList: document.querySelector("#history-list"), historySummary: document.querySelector("#history-summary"),
   historyCacheNote: document.querySelector("#history-cache-note"),
   historyZoomIn: document.querySelector("#history-zoom-in"), historyZoomOut: document.querySelector("#history-zoom-out"), historyZoomReset: document.querySelector("#history-zoom-reset"), historyZoomStatus: document.querySelector("#history-zoom-status"),
@@ -100,6 +103,17 @@ function formatDate(value) {
   return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(asDate(value));
 }
 
+// A diferencia de las mediciones (UTC sin sufijo), el INA informa la fecha de
+// generación del pronóstico ya en hora local Argentina: se muestra tal cual,
+// sin convertir de huso horario.
+function formatLocalNaiveDate(value) {
+  const [datePart, timePart = "00:00:00"] = String(value).split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute] = timePart.split(":").map(Number);
+  const naiveAsUtc = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(naiveAsUtc);
+}
+
 function formatSigned(value, digits = 2) {
   const number = Number(value);
   return `${number > 0 ? "+" : ""}${number.toLocaleString("es-AR", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
@@ -150,6 +164,11 @@ function normalizeForecast(payload) {
     .map((item) => ({ date: item.timestart ?? item.fecha ?? item.time ?? item.date ?? item.d ?? item[0], value: Number(item.valor ?? item.value ?? item.v ?? item[1]) }))
     .filter((item) => item.date && Number.isFinite(item.value))
     .sort((a, b) => asDate(a.date) - asDate(b.date));
+}
+
+function forecastIssuedAt(payload) {
+  const value = payload?.responseHeader?.forecastdate;
+  return typeof value === "string" && value ? value : null;
 }
 
 async function fetchJson(url, label, timeoutMs) {
@@ -251,9 +270,10 @@ function cachedHistoryForStation(payload, siteCode) {
 }
 
 function stationCard(station, current, cachedAt = null) {
+  const frequencyNote = station.dailyUpdate ? `<small class="station-frequency">Actualización diaria del INA</small>` : "";
   if (!current) return `<article class="station-card"><h3>${station.name}</h3><p class="station-river">${station.river}</p><p class="form-message">Medición no disponible.</p></article>`;
   const cacheNote = cachedAt ? `<small class="station-cache">Información guardada · hace ${formatObservationAge(cachedAt)}</small>` : "";
-  return `<article class="station-card"><h3>${station.name}</h3><p class="station-river">${station.river}</p><strong class="station-level">${formatLevel(current.value)} m</strong><time class="station-time" datetime="${current.date}">${formatDate(current.date)}</time>${cacheNote}</article>`;
+  return `<article class="station-card"><h3>${station.name}</h3><p class="station-river">${station.river}</p><strong class="station-level">${formatLevel(current.value)} m</strong><time class="station-time" datetime="${current.date}">${formatDate(current.date)}</time>${frequencyNote}${cacheNote}</article>`;
 }
 
 function renderCachedObservedStations(payload) {
@@ -302,10 +322,11 @@ function dailyForecast(forecast, current) {
   return days;
 }
 
-function renderForecast(forecast, { cachedAt = null } = {}) {
+function renderForecast(forecast, { cachedAt = null, issuedAt = null } = {}) {
   const days = dailyForecast(forecast, latest.current);
   latest.forecast = days;
   showCachedDataNote(elements.forecastCacheNote, cachedAt ? cachedDataMessage("el último pronóstico", cachedAt) : "");
+  elements.forecastIssuedNote.textContent = issuedAt ? `Pronóstico generado por el INA: ${formatLocalNaiveDate(issuedAt)}.` : "";
   elements.forecastGrid.innerHTML = days.map((item) => {
     const state = stateFor(item.value);
     return `<article class="forecast-day"><time datetime="${item.date}">${dayLabel(asDate(item.date))}</time><strong>${formatLevel(item.value)} m</strong><small>máximo estimado</small><span class="forecast-state ${state.className}">${state.label}</span></article>`;
@@ -350,7 +371,7 @@ async function refresh() {
   const forecastPromise = getJson("datosProno", {
     timeStart: request(now), timeEnd: request(end), seriesId: 26202, calId: 432, siteCode: STATION.siteCode, varId: STATION.varId, all: "false", format: "json",
   }).then((payload) => {
-    renderForecast(normalizeForecast(payload));
+    renderForecast(normalizeForecast(payload), { issuedAt: forecastIssuedAt(payload) });
     return payload;
   });
   try {
@@ -379,9 +400,10 @@ async function refresh() {
       console.error(forecastResult.reason);
       const cachedForecast = statusResult.status === "fulfilled" ? statusResult.value?.forecast : null;
       const cachedRows = normalizeCachedSeriesRows(cachedForecast?.rows);
-      if (cachedRows.length) renderForecast(cachedRows, { cachedAt: cachedForecast.updatedAt });
+      if (cachedRows.length) renderForecast(cachedRows, { cachedAt: cachedForecast.updatedAt, issuedAt: cachedForecast.issuedAt });
       else {
         showCachedDataNote(elements.forecastCacheNote, "");
+        elements.forecastIssuedNote.textContent = "";
         elements.forecastGrid.innerHTML = `<p class="form-message">El pronóstico no está disponible en este momento y todavía no hay una copia guardada.</p>`;
       }
     }

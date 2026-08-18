@@ -50,6 +50,11 @@ function forecastUrl(now = new Date(), days = 5) {
   });
 }
 
+function forecastIssuedAt(payload) {
+  const value = payload?.responseHeader?.forecastdate;
+  return typeof value === 'string' && value ? value : null;
+}
+
 function parseDate(value) {
   if (!value) return null;
   const normalized = typeof value === 'string' && !/[zZ]|[+-]\d\d:?\d\d$/.test(value)
@@ -140,6 +145,7 @@ module.exports = {
   currentObservation,
   dailyMaximums,
   dailyRanges,
+  forecastIssuedAt,
   forecastUrl,
   historyRangeDays,
   normalizeCommand,

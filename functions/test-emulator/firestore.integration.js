@@ -109,12 +109,13 @@ test('el adaptador persiste el ciclo completo de un chat en Firestore', async (c
     { d: '2026-08-14T12:00:00Z', v: 0.95 },
     { d: '2026-08-15T12:00:00Z', v: 1.05 },
   ];
-  await repository.setPublicForecast([{ d: '2026-08-16T12:00:00Z', v: 1.2 }]);
+  await repository.setPublicForecast([{ d: '2026-08-16T12:00:00Z', v: 1.2 }], '2026-08-15T09:00:00');
   await repository.mergePublicHistory(52, firstHistory, new Date('2026-08-15T13:00:00Z'));
   await repository.mergePublicHistory(52, secondHistory, new Date('2026-08-15T13:00:00Z'));
 
   const forecast = await repository.getPublicForecast();
   assert.deepEqual(forecast.rows, [{ d: '2026-08-16T12:00:00Z', v: 1.2 }]);
+  assert.equal(forecast.issuedAt, '2026-08-15T09:00:00');
   assert.equal(typeof forecast.updatedAt.toDate, 'function');
   const [history] = await repository.getPublicHistories([52, 49]);
   assert.equal(history.siteCode, 52);

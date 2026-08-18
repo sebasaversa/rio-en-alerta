@@ -4,6 +4,7 @@ const {
   currentObservation,
   dailyMaximums,
   dailyRanges,
+  forecastIssuedAt,
   historyRangeDays,
   normalizeCommand,
   normalizeRows,
@@ -36,6 +37,15 @@ test('mantiene la sintaxis especial de la API del INA y extiende timeEnd un día
   assert.match(url, /siteCode=52/);
   assert.doesNotMatch(url, /\/datos\?/);
   assert.match(stationObservationUrl({ siteCode: 49, varId: 2 }, new Date('2026-08-13T12:00:00Z'), 7), /siteCode=49/);
+});
+
+test('extrae la fecha de generación del pronóstico', () => {
+  assert.equal(
+    forecastIssuedAt({ responseHeader: { forecastdate: '2026-08-18T09:00:00' } }),
+    '2026-08-18T09:00:00',
+  );
+  assert.equal(forecastIssuedAt(forecastFixture), null);
+  assert.equal(forecastIssuedAt(null), null);
 });
 
 test('normaliza comandos con usuario del bot y argumentos', () => {

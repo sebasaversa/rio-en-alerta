@@ -14,13 +14,18 @@ test('construye el estado público desde la última medición guardada', () => {
     updatedAt: new Date('2026-08-14T23:00:00Z'),
   }, {
     days: 7,
-    forecast: { rows: [{ d: '2026-08-16T12:00:00Z', v: 1.2 }], updatedAt: new Date('2026-08-15T03:00:00Z') },
+    forecast: {
+      rows: [{ d: '2026-08-16T12:00:00Z', v: 1.2 }],
+      updatedAt: new Date('2026-08-15T03:00:00Z'),
+      issuedAt: '2026-08-15T09:00:00',
+    },
     histories: [{ siteCode: 52, rows: [{ d: '2026-08-14T22:45:00Z', v: 0.93 }], updatedAt: new Date('2026-08-15T03:00:00Z') }],
   });
   assert.equal(payload.current.currentLevel, 0.93);
   assert.equal(payload.source, 'hourly-cache');
   assert.equal(payload.updatedAt, '2026-08-14T23:00:00.000Z');
   assert.equal(payload.forecast.rows[0].v, 1.2);
+  assert.equal(payload.forecast.issuedAt, '2026-08-15T09:00:00');
   assert.equal(payload.histories[0].siteCode, 52);
   assert.equal(payload.histories[0].updatedAt, '2026-08-15T03:00:00.000Z');
 });

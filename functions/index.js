@@ -6,7 +6,7 @@ const { initializeApp } = require('firebase-admin/app');
 const { FieldValue, Timestamp, getFirestore } = require('firebase-admin/firestore');
 const { COMMANDS, MAIN_KEYBOARD, createBotCore } = require('./bot-core');
 const { createFirestoreRepository } = require('./firestore-repository');
-const { STATION, currentObservation, forecastUrl, observationUrl, stationObservationUrl } = require('./lib');
+const { STATION, currentObservation, forecastIssuedAt, forecastUrl, observationUrl, stationObservationUrl } = require('./lib');
 const { compactPublicRows, parsePublicHistoryDays } = require('./public-cache');
 const { buildPublicStatusPayload } = require('./public-status');
 const { createTelegramClient } = require('./telegram-client');
@@ -73,7 +73,7 @@ async function refreshPublicDataCache(historyDays) {
     getJson(forecastUrl(now), 30000).then(async (payload) => {
       const rows = compactPublicRows(payload);
       if (!rows.length) throw new Error('INA no devolvió un pronóstico válido para cachear');
-      await repository.setPublicForecast(rows);
+      await repository.setPublicForecast(rows, forecastIssuedAt(payload));
       return { kind: 'forecast', rowCount: rows.length };
     }),
     ...PUBLIC_STATIONS.map((station) => getJson(stationObservationUrl(station, now, historyDays), timeoutMs).then(async (payload) => {

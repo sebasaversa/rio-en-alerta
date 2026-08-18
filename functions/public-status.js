@@ -12,6 +12,7 @@ function buildCachedSeries(data, days = null) {
   return {
     rows: days ? filterCompactRows(data.rows, days) : compactPublicRows(data.rows),
     updatedAt: timestampIso(data.updatedAt),
+    issuedAt: data.issuedAt ?? null,
   };
 }
 

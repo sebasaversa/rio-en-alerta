@@ -178,8 +178,8 @@ function createFirestoreRepository({ db, FieldValue }) {
       .map((snapshot) => ({ siteCode: Number(snapshot.id), ...snapshot.data() }));
   }
 
-  async function setPublicForecast(rows) {
-    await forecastRef.set({ rows, updatedAt: FieldValue.serverTimestamp() });
+  async function setPublicForecast(rows, issuedAt = null) {
+    await forecastRef.set({ rows, issuedAt, updatedAt: FieldValue.serverTimestamp() });
   }
 
   async function mergePublicHistory(siteCode, incomingRows, now = new Date()) {
