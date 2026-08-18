@@ -43,6 +43,17 @@ jobs:
           cp index.html admin.html dist/
           cp src/app.js src/history.mjs src/chart-viewport.mjs src/public-status.mjs src/styles.css src/admin.js src/admin.css src/firebase.js dist/src/
           test -e dist/src/public-status.mjs
+          # GitHub Pages sirve estos archivos con cache-control: max-age=600 sin
+          # forma de anular el header, así que se versionan con el SHA del commit
+          # para que cada deploy invalide la caché del navegador automáticamente.
+          VERSION="${GITHUB_SHA::8}"
+          sed -i "s/src=\"src\/app\.js\"/src=\"src\/app.js?v=${VERSION}\"/" dist/index.html
+          sed -i "s/href=\"src\/styles\.css\"/href=\"src\/styles.css?v=${VERSION}\"/" dist/index.html
+          sed -i "s/from \"\.\/history\.mjs\"/from \".\/history.mjs?v=${VERSION}\"/" dist/src/app.js
+          sed -i "s/from \"\.\/chart-viewport\.mjs\"/from \".\/chart-viewport.mjs?v=${VERSION}\"/" dist/src/app.js
+          sed -i "s/from \"\.\/public-status\.mjs\"/from \".\/public-status.mjs?v=${VERSION}\"/" dist/src/app.js
+          grep -q "app.js?v=${VERSION}" dist/index.html
+          grep -q "history.mjs?v=${VERSION}" dist/src/app.js
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
