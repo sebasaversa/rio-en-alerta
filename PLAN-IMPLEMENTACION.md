@@ -584,7 +584,8 @@ se recalculan diariamente a las 02:30 ART). Hasta disponer de p95 valido no
 se generan avisos de velocidad ni se usa p90 como respaldo; las alertas por
 altura siguen funcionando. La web y el resumen diario reclasifican la
 velocidad cacheada con los nuevos umbrales para no mostrar etiquetas viejas.
-El cambio esta implementado localmente; esta nota no acredita un despliegue.
+La publicacion debe acreditarse con el PR integrado, CI y Pages exitosos,
+Functions activas y los nuevos percentiles verificados en `publicRiverStatus`.
 
 ### Decisiones aprobadas el 13 de agosto de 2026
 
@@ -702,7 +703,8 @@ medicion es menor o igual a `threshold - 0,10 m`.
 - los errores de Telegram no rompen el procesamiento de los demas chats.
 - `/avisos` persiste preferencias independientes y procesa callbacks inline;
 - crecida y bajante rapidas se envian una sola vez por entrada al estado;
-- una medicion normal rearma la condicion estadistica;
+- una medicion estrictamente bajo p90 de su direccion rearma la condicion
+  estadistica; una velocidad entre p90 y p95 no la rearma;
 - recuperacion respeta la histeresis exacta de 10 cm y rearma altura;
 - `/pronostico` muestra rangos diarios y `/historial` transmite al cliente INA
   la cantidad de dias solicitada;
