@@ -260,9 +260,12 @@ del INA. Una vez al dia se descargan hasta 365 dias observados de San Fernando
 (`siteCode=52`, `varId=2`). Se conservan los timestamps originales, se
 normalizan fechas, se descartan alturas fuera del rango fisico operativo de
 -5 a 10 m, se deduplican timestamps y se ordenan de antiguo a reciente.
-La descarga anual dispone de hasta 120 segundos dentro de una Function con
-limite total de 180 segundos; las consultas ordinarias mantienen un timeout de
-15 segundos para fallar rapido sin bloquear la interfaz ni el bot.
+El calculo estadistico descarga la ventana anual en 13 tramos de hasta 30 dias,
+con hasta cuatro consultas simultaneas y 30 segundos por consulta dentro de
+una Function de 180 segundos. Evita el error 504 del INA en consultas anuales.
+Si un tramo falla o llega vacio, se conserva el calculo anterior; los timestamps
+solapados se deduplican antes de calcular velocidades. Las consultas ordinarias
+mantienen un timeout de 15 segundos para no bloquear la interfaz ni el bot.
 
 Para cada par consecutivo valido:
 
@@ -584,6 +587,10 @@ se recalculan diariamente a las 02:30 ART). Hasta disponer de p95 valido no
 se generan avisos de velocidad ni se usa p90 como respaldo; las alertas por
 altura siguen funcionando. La web y el resumen diario reclasifican la
 velocidad cacheada con los nuevos umbrales para no mostrar etiquetas viejas.
+La revision previa a publicar detecto que la descarga anual fallaba con 504
+y los percentiles en produccion no se actualizaban desde el 15 de agosto.
+Por eso este cambio tambien descarga el historial estadistico por tramos.
+
 La publicacion debe acreditarse con el PR integrado, CI y Pages exitosos,
 Functions activas y los nuevos percentiles verificados en `publicRiverStatus`.
 
