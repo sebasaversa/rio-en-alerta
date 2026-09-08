@@ -260,7 +260,7 @@ test('configura y envía una sola vez el resumen diario de las 08:00', async () 
     current: { value: 1.2, date: '2026-08-14T11:00:00Z' },
     dateKey: '2026-08-14',
     velocityData: {
-      statistics: { sufficient: true },
+      statistics: { sufficient: true, p90Ascent: 0.1, p90Descent: 0.08, p95Ascent: 0.18, p95Descent: 0.12 },
       current: {
         label: 'Subida rápida',
         speedMetersPerHour: 0.18,
@@ -331,7 +331,7 @@ test('envía avisos estadísticos una vez por estado y recuperación con histér
     alertPreferences: { height: true, rapidRise: true, rapidFall: true, recovery: true },
   }]);
   const fixture = createFixture({ repository });
-  const statistics = { p90Ascent: 0.33, p90Descent: 0.16 };
+  const statistics = { sufficient: true, p90Ascent: 0.33, p90Descent: 0.16, p95Ascent: 0.4, p95Descent: 0.2 };
 
   await fixture.bot.checkRiver(
     { value: 2.5, date: '2026-08-14T12:00:00Z' },
@@ -342,6 +342,7 @@ test('envía avisos estadísticos una vez por estado y recuperación con histér
     },
   );
   assert.match(fixture.messages.at(-1).text, /Crecida rápida/);
+  assert.match(fixture.messages.at(-1).text, /p95 de \+0,40/);
   assert.equal(fixture.messages.at(-1).text.includes('Alcanzó tu altura'), false);
 
   await fixture.bot.checkRiver(
@@ -368,6 +369,27 @@ test('envía avisos estadísticos una vez por estado y recuperación con histér
   );
   assert.match(fixture.messages.at(-1).text, /Recuperación/);
   assert.deepEqual(repository.alertEvents.map((event) => event.type), ['rapidRise', 'height', 'recovery']);
+});
+
+test('persiste el episodio entre revisiones y no envía mensajes al oscilar entre p90 y p95', async () => {
+  const repository = new InMemoryRepository([{
+    id: '9', chatId: 9, threshold: 3, active: true,
+    alertPreferences: { rapidRise: true, rapidFall: true },
+  }]);
+  const fixture = createFixture({ repository });
+  const { classifySpeed } = require('../velocity');
+  const statistics = { sufficient: true, p90Ascent: 0.33, p90Descent: 0.16, p95Ascent: 0.4, p95Descent: 0.2 };
+  const speeds = [0.4, 0.35, 0.4, 0.33, 0.4, 0.32, 0.4, -0.2, -0.18, -0.2, -0.16, -0.2, -0.15, -0.2];
+  for (const [hour, speed] of speeds.entries()) {
+    await fixture.bot.checkRiver({ value: 1, date: new Date(Date.UTC(2026, 7, 14, hour)).toISOString() }, {
+      isNewObservation: true, statistics,
+      detection: { ...classifySpeed(speed, statistics), speedMetersPerHour: speed, speedCentimetersPerHour: speed * 100 },
+    });
+  }
+  assert.equal(fixture.messages.length, 4);
+  assert.deepEqual(repository.alertEvents.map((event) => event.type), ['rapidRise', 'rapidRise', 'rapidFall', 'rapidFall']);
+  assert.ok(fixture.messages.every((message) => message.text.includes('p95')));
+  assert.match(fixture.messages.at(-1).text, /p95 de −0,20/);
 });
 
 test('no procesa chats cuando el INA todavía devuelve la misma medición', async () => {

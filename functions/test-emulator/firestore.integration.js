@@ -88,6 +88,8 @@ test('el adaptador persiste el ciclo completo de un chat en Firestore', async (c
 
   const statistics = {
     sufficient: true,
+    p95Ascent: 0.4,
+    p95Descent: 0.2,
     p90Ascent: 0.33,
     p90Descent: 0.16,
     validIntervalCount: 8612,

@@ -1,3 +1,5 @@
+const { classifySpeed } = require('./velocity');
+
 const HYSTERESIS_METERS = 0.1;
 
 const DEFAULT_ALERT_PREFERENCES = Object.freeze({
@@ -96,9 +98,17 @@ function evaluateAlertTransition({
   }
 
   let velocityCondition = state.velocityCondition;
-  const velocityCode = velocity?.code;
+  const speed = velocity?.speedMetersPerHour;
+  // Revalidate against the current thresholds; cached classifications may use p90.
+  const velocityCode = NORMAL_CODES.has(velocity?.code) || RAPID_CODES.has(velocity?.code)
+    ? classifySpeed(speed, statistics).code
+    : velocity?.code;
   if (NORMAL_CODES.has(velocityCode)) {
-    velocityCondition = 'normal';
+    // At exactly p90 the episode stays latched. A reversal also rearms it.
+    if ((velocityCondition === 'rapid-rise' && speed < statistics.p90Ascent)
+      || (velocityCondition === 'rapid-fall' && speed > -statistics.p90Descent)) {
+      velocityCondition = 'normal';
+    }
   } else if (RAPID_CODES.has(velocityCode)) {
     const preferenceKey = velocityCode === 'rapid-rise' ? 'rapidRise' : 'rapidFall';
     if (velocityCondition !== velocityCode && normalizedPreferences[preferenceKey]) {
@@ -106,9 +116,9 @@ function evaluateAlertTransition({
         type: preferenceKey,
         speedMetersPerHour: Number(velocity.speedMetersPerHour),
         speedCentimetersPerHour: Number(velocity.speedCentimetersPerHour),
-        p90MetersPerHour: velocityCode === 'rapid-rise'
-          ? Number(statistics?.p90Ascent)
-          : -Math.abs(Number(statistics?.p90Descent)),
+        p95MetersPerHour: velocityCode === 'rapid-rise'
+          ? statistics.p95Ascent
+          : -statistics.p95Descent,
       });
     }
     velocityCondition = velocityCode;

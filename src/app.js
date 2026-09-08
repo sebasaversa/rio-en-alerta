@@ -248,13 +248,15 @@ function cachedDataMessage(kind, updatedAt) {
 function renderVelocityStatus(payload) {
   const statistics = payload?.statistics;
   const current = payload?.current;
-  const insufficient = !statistics?.sufficient || !current || current.code === "insufficient";
+  const insufficient = !statistics?.sufficient || !current || current.code === "insufficient"
+    || ![statistics.p95Ascent, statistics.p95Descent].every((value) => Number.isFinite(value) && value > 0);
   if (insufficient) {
     elements.trendLabel.textContent = "Datos insuficientes";
     elements.trendElapsed.textContent = "Tiempo transcurrido: —";
     elements.trendSpeed.textContent = "Velocidad: —";
     elements.trendAlertSpeed.textContent = "Velocidad de alerta estadística: no disponible";
     elements.trendNote.textContent = "Datos insuficientes para calcular la velocidad";
+    elements.velocityMethodology.textContent = "Indicador estadístico calculado por Río en Alerta. Se necesitan percentiles p95 y p90 actualizados para evaluar la velocidad. No constituye una alerta oficial.";
     return;
   }
   const speed = Number(current.speedMetersPerHour);
@@ -263,18 +265,18 @@ function renderVelocityStatus(payload) {
   elements.trendDescription.textContent = `Variación desde la lectura anterior: ${formatSigned(current.change)} m.`;
   elements.trendElapsed.textContent = `Tiempo transcurrido: ${formatElapsed(current.hours)}`;
   elements.trendSpeed.textContent = `Velocidad: ${formatSigned(speed)} m/h (${formatSigned(current.speedCentimetersPerHour, 1)} cm/h)`;
-  const ascentAlertSpeed = Number(statistics.p90Ascent);
-  const descentAlertSpeed = -Math.abs(Number(statistics.p90Descent));
+  const ascentAlertSpeed = Number(statistics.p95Ascent);
+  const descentAlertSpeed = -Math.abs(Number(statistics.p95Descent));
   elements.trendAlertSpeed.textContent = `Velocidad de alerta estadística: subida ≥ ${formatSigned(ascentAlertSpeed)} m/h (${formatSigned(ascentAlertSpeed * 100, 1)} cm/h) · bajada ≤ ${formatSigned(descentAlertSpeed)} m/h (${formatSigned(descentAlertSpeed * 100, 1)} cm/h)`;
   const rapid = current.code === "rapid-rise" || current.code === "rapid-fall";
   elements.trendNote.textContent = rapid
-    ? `${current.label}: esta velocidad pertenece al 10 % de las variaciones históricas más rápidas de su tipo en San Fernando.`
-    : `${current.label}: la velocidad no alcanza el percentil 90 histórico de su tipo.`;
+    ? `${current.label}: esta velocidad alcanza el percentil 95 histórico de su tipo en San Fernando.`
+    : `${current.label}: la velocidad no alcanza el percentil 95 histórico de su tipo.`;
   const period = statistics.periodStart && statistics.periodEnd
     ? `${formatDate(statistics.periodStart)} a ${formatDate(statistics.periodEnd)}`
     : "periodo no disponible";
   const calculated = payload.calculatedAt ? formatDate(payload.calculatedAt) : "fecha no disponible";
-  elements.velocityMethodology.textContent = `Indicador estadístico calculado por Río en Alerta con ${statistics.validIntervalCount} intervalos válidos (${period}). Percentil 90: ascenso ${formatLevel(statistics.p90Ascent)} m/h y descenso ${formatLevel(statistics.p90Descent)} m/h. Último cálculo: ${calculated}. El percentil 90 identifica el 10 % de las variaciones históricas más rápidas. No constituye una alerta oficial. Los niveles oficiales de San Fernando son 3,00 m para alerta y 3,50 m para evacuación.`;
+  elements.velocityMethodology.textContent = `Indicador estadístico calculado por Río en Alerta con ${statistics.validIntervalCount} intervalos válidos (${period}). Percentil 95: ascenso ${formatLevel(statistics.p95Ascent)} m/h y descenso ${formatLevel(statistics.p95Descent)} m/h. Selecciona aproximadamente el 5 % de las variaciones históricas más rápidas de cada tipo. Para evitar avisos repetidos, un nuevo aviso de la misma dirección se habilita cuando la velocidad baja del percentil 90: ascenso ${formatLevel(statistics.p90Ascent)} m/h y descenso ${formatLevel(statistics.p90Descent)} m/h, en valor absoluto, o cambia de dirección. Último cálculo: ${calculated}. No constituye una alerta oficial. Los niveles oficiales de San Fernando son 3,00 m para alerta y 3,50 m para evacuación.`;
 }
 
 function cachedHistoryForStation(payload, siteCode) {

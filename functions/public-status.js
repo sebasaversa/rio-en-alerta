@@ -1,4 +1,5 @@
 const { compactPublicRows, filterCompactRows } = require('./public-cache');
+const { classifySpeed } = require('./velocity');
 
 function timestampIso(value) {
   if (!value) return null;
@@ -23,7 +24,10 @@ function buildPublicStatusPayload(velocityData, { forecast = null, histories = [
     station: { siteCode: 52, name: 'San Fernando', river: 'Río Luján' },
     officialLevels: { alert: 3, evacuation: 3.5 },
     statistics: velocityData?.statistics ?? null,
-    current,
+    current: {
+      ...current,
+      ...(current.code === 'insufficient' ? {} : classifySpeed(current.speedMetersPerHour, velocityData?.statistics)),
+    },
     calculatedAt: timestampIso(velocityData?.calculatedAt),
     updatedAt: timestampIso(velocityData?.updatedAt),
     source: 'hourly-cache',

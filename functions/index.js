@@ -11,6 +11,7 @@ const { compactPublicRows, parsePublicHistoryDays } = require('./public-cache');
 const { buildPublicStatusPayload } = require('./public-status');
 const { createTelegramClient } = require('./telegram-client');
 const { calculateCurrentVelocity, calculateVelocityStatistics } = require('./velocity');
+const { loadVelocityHistory } = require('./ina-history');
 
 initializeApp();
 const db = getFirestore();
@@ -165,7 +166,7 @@ exports.calculateVelocityStats = onSchedule(
     memory: '512MiB',
   },
   async () => {
-    const payload = await getJson(observationUrl(new Date(), 365), 120000);
+    const payload = await loadVelocityHistory(getJson);
     const statistics = calculateVelocityStatistics(payload);
     await repository.setVelocityStatistics(statistics);
     const previous = await repository.getVelocityData();
@@ -177,6 +178,8 @@ exports.calculateVelocityStats = onSchedule(
       sufficient: statistics.sufficient,
       coverageDays: statistics.coverageDays,
       validIntervalCount: statistics.validIntervalCount,
+      p95Ascent: statistics.p95Ascent,
+      p95Descent: statistics.p95Descent,
       p90Ascent: statistics.p90Ascent,
       p90Descent: statistics.p90Descent,
     });

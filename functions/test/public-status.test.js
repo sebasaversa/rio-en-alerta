@@ -2,7 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { buildPublicStatusPayload } = require('../public-status');
 
-test('construye el estado público desde la última medición guardada', () => {
+test('construye el estado público desde la última medición guardada', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-08-15T03:00:00Z') });
   const payload = buildPublicStatusPayload({
     statistics: { sufficient: true, p90Ascent: 0.3, p90Descent: 0.2 },
     current: {
@@ -33,6 +34,32 @@ test('construye el estado público desde la última medición guardada', () => {
 test('no publica un cache sin fecha o altura válida', () => {
   assert.equal(buildPublicStatusPayload({ current: { currentLevel: 0.93 } }), null);
   assert.equal(buildPublicStatusPayload({ current: { observedAt: '2026-08-14', currentLevel: 'no válido' } }), null);
+});
+
+test('reclasifica un estado cacheado con p90 usando el p95 actual sin esperar otra medición', () => {
+  const payload = buildPublicStatusPayload({
+    statistics: { sufficient: true, p90Ascent: 0.3, p90Descent: 0.1, p95Ascent: 0.4, p95Descent: 0.2 },
+    current: { observedAt: '2026-08-14T22:45:00Z', currentLevel: 1, code: 'rapid-rise', label: 'Subida rápida', speedMetersPerHour: 0.35 },
+  });
+  assert.equal(payload.current.code, 'normal-rise');
+  assert.equal(payload.current.label, 'Ascenso normal');
+});
+
+test('el caché sin p95 conserva la altura y no publica una clasificación rápida antigua', () => {
+  const payload = buildPublicStatusPayload({
+    statistics: { sufficient: true, p90Ascent: 0.3, p90Descent: 0.1 },
+    current: { observedAt: '2026-08-14T22:45:00Z', currentLevel: 1, code: 'rapid-rise', speedMetersPerHour: 0.35 },
+  });
+  assert.equal(payload.current.currentLevel, 1);
+  assert.equal(payload.current.code, 'insufficient');
+});
+
+test('no revive una detección insuficiente aunque el documento conserve una velocidad anterior', () => {
+  const payload = buildPublicStatusPayload({
+    statistics: { sufficient: true, p90Ascent: 0.3, p90Descent: 0.1, p95Ascent: 0.4, p95Descent: 0.2 },
+    current: { observedAt: '2026-08-14T22:45:00Z', currentLevel: 1, code: 'insufficient', speedMetersPerHour: 0.5 },
+  });
+  assert.equal(payload.current.code, 'insufficient');
 });
 
 test('normaliza las dos mediciones cacheadas para la web', async () => {
