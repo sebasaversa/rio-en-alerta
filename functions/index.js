@@ -177,6 +177,8 @@ exports.calculateVelocityStats = onSchedule(
       sufficient: statistics.sufficient,
       coverageDays: statistics.coverageDays,
       validIntervalCount: statistics.validIntervalCount,
+      p95Ascent: statistics.p95Ascent,
+      p95Descent: statistics.p95Descent,
       p90Ascent: statistics.p90Ascent,
       p90Descent: statistics.p90Descent,
     });

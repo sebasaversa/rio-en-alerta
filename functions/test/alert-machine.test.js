@@ -14,6 +14,63 @@ const ALL_ALERTS = {
   recovery: true,
 };
 
+for (const [direction, sign, p90, p95, type] of [
+  ['rise', 1, 0.33, 0.4, 'rapidRise'],
+  ['fall', -1, 0.16, 0.2, 'rapidFall'],
+]) {
+  test(`histéresis ${direction}: p95 activa, igualdad con p90 no rearma y bajar de p90 sí`, () => {
+    let previousState = {};
+    const speeds = [p90, (p90 + p95) / 2, p95, (p90 + p95) / 2, p95, p90, p95, p90 - 0.01, p95];
+    const emitted = [];
+    speeds.forEach((magnitude, index) => {
+      const speed = sign * magnitude;
+      const result = evaluate({
+        current: { value: 1, date: new Date(Date.UTC(2026, 7, 14, index)).toISOString() },
+        previousState,
+        velocity: {
+          code: `${magnitude >= p95 ? 'rapid' : 'normal'}-${direction}`,
+          speedMetersPerHour: speed, speedCentimetersPerHour: speed * 100,
+        },
+      });
+      if (result.events.length) emitted.push([index, result.events[0].type]);
+      if (index >= 2 && index <= 6) assert.equal(result.state.velocityCondition, `rapid-${direction}`);
+      previousState = result.state;
+    });
+    assert.deepEqual(emitted, [[2, type], [8, type]]);
+  });
+}
+
+test('un cambio de dirección permite avisar el episodio opuesto y rearma el anterior', () => {
+  const rise = evaluate({ velocity: { code: 'rapid-rise', speedMetersPerHour: 0.4 } });
+  const fall = evaluate({
+    current: { value: 1, date: '2026-08-14T13:00:00Z' }, previousState: rise.state,
+    velocity: { code: 'rapid-fall', speedMetersPerHour: -0.2 },
+  });
+  assert.deepEqual(fall.events.map((event) => event.type), ['rapidFall']);
+  const riseAgain = evaluate({
+    current: { value: 1.4, date: '2026-08-14T14:00:00Z' }, previousState: fall.state,
+    velocity: { code: 'rapid-rise', speedMetersPerHour: 0.4 },
+  });
+  assert.deepEqual(riseAgain.events.map((event) => event.type), ['rapidRise']);
+});
+
+test('datos incompletos no rearman un episodio ni impiden el aviso por altura', () => {
+  const previousState = { velocityCondition: 'rapid-rise', heightCondition: 'below' };
+  for (const velocity of [{ code: 'insufficient' }, { code: 'no-new-observation' },
+    { code: 'normal-rise' }]) {
+    const result = evaluate({ previousState, velocity, current: { value: 3.1, date: '2026-08-14T12:00:00Z' } });
+    assert.equal(result.state.velocityCondition, 'rapid-rise');
+    assert.deepEqual(result.events.map((event) => event.type), ['height']);
+  }
+  const legacy = evaluate({
+    previousState,
+    statistics: { sufficient: true, p90Ascent: 0.33, p90Descent: 0.16 },
+    velocity: { code: 'rapid-fall', speedMetersPerHour: -0.5 },
+  });
+  assert.equal(legacy.state.velocityCondition, 'rapid-rise');
+  assert.deepEqual(legacy.events, []);
+});
+
 function evaluate(overrides = {}) {
   return evaluateAlertTransition({
     current: { value: 2.5, date: '2026-08-14T12:00:00Z' },
@@ -21,7 +78,7 @@ function evaluate(overrides = {}) {
     preferences: ALL_ALERTS,
     previousState: {},
     velocity: { code: 'normal-rise', speedMetersPerHour: 0.1, speedCentimetersPerHour: 10 },
-    statistics: { p90Ascent: 0.33, p90Descent: 0.16 },
+    statistics: { sufficient: true, p90Ascent: 0.33, p90Descent: 0.16, p95Ascent: 0.4, p95Descent: 0.2 },
     ...overrides,
   });
 }
@@ -83,21 +140,21 @@ test('aplica histéresis de 10 cm antes de avisar recuperación y rearmar altura
   assert.deepEqual(reentered.events.map((event) => event.type), ['height']);
 });
 
-test('avisa crecida rápida por p90 independientemente de la altura', () => {
+test('avisa crecida rápida por p95 independientemente de la altura', () => {
   const result = evaluate({
     current: { value: 1.2, date: '2026-08-14T12:00:00Z' },
-    velocity: { code: 'rapid-rise', speedMetersPerHour: 0.33, speedCentimetersPerHour: 33 },
+    velocity: { code: 'rapid-rise', speedMetersPerHour: 0.4, speedCentimetersPerHour: 40 },
   });
   assert.deepEqual(result.events.map((event) => event.type), ['rapidRise']);
-  assert.equal(result.events[0].p90MetersPerHour, 0.33);
+  assert.equal(result.events[0].p95MetersPerHour, 0.4);
 });
 
-test('avisa bajante rápida con el p90 de descensos', () => {
+test('avisa bajante rápida con el p95 de descensos', () => {
   const result = evaluate({
     velocity: { code: 'rapid-fall', speedMetersPerHour: -0.2, speedCentimetersPerHour: -20 },
   });
   assert.deepEqual(result.events.map((event) => event.type), ['rapidFall']);
-  assert.equal(result.events[0].p90MetersPerHour, -0.16);
+  assert.equal(result.events[0].p95MetersPerHour, -0.2);
 });
 
 test('no repite una condición rápida y la rearma después de una medición normal', () => {

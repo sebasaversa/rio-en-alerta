@@ -35,7 +35,10 @@ suscriptores.
   para ascensos y descensos.
 - Firestore guarda suscripciones, actividad, estado operativo y alertas
   enviadas. Una máquina de estados procesa cada medición del INA una sola vez,
-  evita repetir una condición y aplica 10 cm de histéresis a la recuperación.
+  activa los avisos de velocidad al alcanzar p95 y los rearma recién al bajar
+  de p90 de la misma dirección (o cambiar de dirección). Mantiene el episodio
+  entre ambos percentiles para evitar repeticiones. La recuperación por altura
+  conserva su histéresis de 10 cm.
 - Firebase Authentication protege el panel administrativo.
 
 ## Desarrollo y validación

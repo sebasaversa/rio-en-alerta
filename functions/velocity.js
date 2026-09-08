@@ -8,7 +8,8 @@ const DEFAULT_VELOCITY_OPTIONS = Object.freeze({
   maxIntervalHours: 6,
   minCoverageDays: 90,
   minIntervals: 100,
-  percentile: 0.9,
+  percentile: 0.95,
+  rearmPercentile: 0.9,
 });
 
 function percentile(values, probability) {
@@ -77,8 +78,11 @@ function calculateVelocityStatistics(payload, overrides = {}) {
     sufficient,
     reasons,
     percentile: options.percentile,
-    p90Ascent: sufficient ? percentile(ascents, options.percentile) : null,
-    p90Descent: sufficient ? percentile(descents, options.percentile) : null,
+    rearmPercentile: options.rearmPercentile,
+    p95Ascent: sufficient ? percentile(ascents, options.percentile) : null,
+    p95Descent: sufficient ? percentile(descents, options.percentile) : null,
+    p90Ascent: sufficient ? percentile(ascents, options.rearmPercentile) : null,
+    p90Descent: sufficient ? percentile(descents, options.rearmPercentile) : null,
     coverageDays,
     observationCount: observations.length,
     validIntervalCount: intervals.length,
@@ -96,12 +100,20 @@ function metersPerHourToCentimeters(value) {
   return value * 100;
 }
 
+function hasVelocityThresholds(statistics) {
+  return Boolean(statistics?.sufficient)
+    && ['p90Ascent', 'p90Descent', 'p95Ascent', 'p95Descent']
+      .every((key) => Number.isFinite(statistics[key]) && statistics[key] > 0)
+    && statistics.p90Ascent <= statistics.p95Ascent
+    && statistics.p90Descent <= statistics.p95Descent;
+}
+
 function classifySpeed(speed, statistics) {
-  if (!statistics?.sufficient) {
+  if (!hasVelocityThresholds(statistics) || !Number.isFinite(speed)) {
     return { code: 'insufficient', label: 'Datos insuficientes para calcular la velocidad' };
   }
-  if (speed >= statistics.p90Ascent) return { code: 'rapid-rise', label: 'Subida rápida' };
-  if (speed < 0 && Math.abs(speed) >= statistics.p90Descent) return { code: 'rapid-fall', label: 'Bajada rápida' };
+  if (speed >= statistics.p95Ascent) return { code: 'rapid-rise', label: 'Subida rápida' };
+  if (speed < 0 && Math.abs(speed) >= statistics.p95Descent) return { code: 'rapid-fall', label: 'Bajada rápida' };
   if (speed > 0) return { code: 'normal-rise', label: 'Ascenso normal' };
   if (speed < 0) return { code: 'normal-fall', label: 'Descenso normal' };
   return { code: 'unchanged', label: 'Sin cambios' };
@@ -112,7 +124,7 @@ function calculateCurrentVelocity(payload, statistics, options = {}) {
     minLevel: statistics?.minLevel,
     maxLevel: statistics?.maxLevel,
   });
-  if (!statistics?.sufficient || normalized.length < 2) {
+  if (!hasVelocityThresholds(statistics) || normalized.length < 2) {
     return {
       code: 'insufficient',
       label: 'Datos insuficientes para calcular la velocidad',
@@ -164,6 +176,7 @@ module.exports = {
   calculateVelocityIntervals,
   calculateVelocityStatistics,
   classifySpeed,
+  hasVelocityThresholds,
   metersPerHourToCentimeters,
   normalizeVelocityObservations,
   percentile,

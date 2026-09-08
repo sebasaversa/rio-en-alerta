@@ -12,6 +12,7 @@ const {
   evaluateAlertTransition,
   normalizeAlertPreferences,
 } = require('./alert-machine');
+const { classifySpeed } = require('./velocity');
 
 const WEB_URL = 'https://sebasaversa.github.io/rio-en-alerta/';
 
@@ -158,9 +159,9 @@ function buildAlertMessage(chat, current, events) {
       return `✅ *Recuperación:* bajó al menos 10 cm por debajo de tu altura seleccionada (*${formatLevel(event.recoveryLevel)} m*).`;
     }
     if (event.type === 'rapidRise') {
-      return `📈 *Crecida rápida:* ${formatSigned(event.speedMetersPerHour)} m/h (${formatSigned(event.speedCentimetersPerHour, 1)} cm/h), igual o superior al p90 de ${formatSigned(event.p90MetersPerHour)} m/h.`;
+      return `📈 *Crecida rápida:* ${formatSigned(event.speedMetersPerHour)} m/h (${formatSigned(event.speedCentimetersPerHour, 1)} cm/h), igual o superior al p95 de ${formatSigned(event.p95MetersPerHour)} m/h.`;
     }
-    return `📉 *Bajante rápida:* ${formatSigned(event.speedMetersPerHour)} m/h (${formatSigned(event.speedCentimetersPerHour, 1)} cm/h), igual o inferior al p90 de ${formatSigned(event.p90MetersPerHour)} m/h.`;
+    return `📉 *Bajante rápida:* ${formatSigned(event.speedMetersPerHour)} m/h (${formatSigned(event.speedCentimetersPerHour, 1)} cm/h), igual o inferior al p95 de ${formatSigned(event.p95MetersPerHour)} m/h.`;
   });
   const hasStatisticalEvent = events.some((event) => event.type === 'rapidRise' || event.type === 'rapidFall');
   return [
@@ -462,9 +463,10 @@ function createBotCore(options) {
         continue;
       }
       const velocity = velocityData?.statistics?.sufficient ? velocityData.current : null;
-      const trend = velocity?.speedMetersPerHour == null
+      const classification = classifySpeed(velocity?.speedMetersPerHour, velocityData?.statistics);
+      const trend = classification.code === 'insufficient' || velocity?.code === 'insufficient'
         ? 'Tendencia estadística: datos insuficientes.'
-        : `Tendencia: *${velocity.label}* (${formatSigned(velocity.speedMetersPerHour)} m/h; ${formatSigned(velocity.speedCentimetersPerHour, 1)} cm/h).`;
+        : `Tendencia: *${classification.label}* (${formatSigned(velocity.speedMetersPerHour)} m/h; ${formatSigned(velocity.speedCentimetersPerHour, 1)} cm/h).`;
       try {
         await sendMessage(chat.chatId, [
           `🌅 *Resumen diario de las 08:00 — ${STATION.name}*`,

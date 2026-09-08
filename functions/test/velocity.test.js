@@ -29,6 +29,34 @@ test('calcula percentil 90 mediante interpolación lineal', () => {
   assert.equal(percentile([4, 1, 3, 2], 0.9), 3.7);
 });
 
+test('calcula p95 de activación y p90 de rearme por separado en ambas direcciones', () => {
+  const levels = [0, 1, 0.5, 2.5, 1.5, 4.5, 3, 7, 5];
+  const start = Date.parse('2026-01-01T00:00:00Z');
+  const stats = calculateVelocityStatistics(payload(levels.map((level, hour) => [
+    new Date(start + hour * 3600000).toISOString(), level,
+  ])), { minCoverageDays: 0, minIntervals: 0 });
+  assert.equal(stats.sufficient, true);
+  assert.equal(stats.percentile, 0.95);
+  assert.equal(stats.rearmPercentile, 0.9);
+  for (const [key, expected] of Object.entries({
+    p95Ascent: 3.85, p90Ascent: 3.7, p95Descent: 1.925, p90Descent: 1.85,
+  })) assert.ok(Math.abs(stats[key] - expected) < 1e-12, key);
+});
+
+test('entre p90 y p95 la clasificación actual es normal', () => {
+  const statistics = { sufficient: true, p90Ascent: 0.3, p90Descent: 0.1, p95Ascent: 0.4, p95Descent: 0.2 };
+  assert.equal(classifySpeed(0.35, statistics).code, 'normal-rise');
+  assert.equal(classifySpeed(-0.15, statistics).code, 'normal-fall');
+});
+
+test('no usa p90 como respaldo si el caché aún no tiene p95 o los umbrales son inválidos', () => {
+  const legacy = { sufficient: true, p90Ascent: 0.3, p90Descent: 0.1 };
+  for (const extra of [{}, { p95Ascent: null, p95Descent: null },
+    { p95Ascent: 0.2, p95Descent: 0.2 }, { p95Ascent: NaN, p95Descent: 0.2 }]) {
+    assert.equal(classifySpeed(0.5, { ...legacy, ...extra }).code, 'insufficient');
+  }
+});
+
 test('separa ascensos y descensos para sus percentiles independientes', () => {
   const rows = [];
   const start = Date.parse('2026-01-01T00:00:00Z');
@@ -75,18 +103,20 @@ test('rechaza un historial sin cobertura o intervalos suficientes', () => {
   assert.equal(stats.sufficient, false);
   assert.equal(stats.p90Ascent, null);
   assert.equal(stats.p90Descent, null);
+  assert.equal(stats.p95Ascent, null);
+  assert.equal(stats.p95Descent, null);
   assert.deepEqual(stats.reasons, ['coverage', 'intervals']);
 });
 
 test('clasifica como rápida una velocidad exactamente igual al percentil', () => {
-  const statistics = { sufficient: true, p90Ascent: 0.1, p90Descent: 0.08 };
+  const statistics = { sufficient: true, p90Ascent: 0.08, p90Descent: 0.06, p95Ascent: 0.1, p95Descent: 0.08 };
   assert.equal(classifySpeed(0.1, statistics).code, 'rapid-rise');
   assert.equal(classifySpeed(-0.08, statistics).code, 'rapid-fall');
 });
 
 test('no genera una nueva detección para la misma medición del INA', () => {
   const statistics = {
-    sufficient: true, p90Ascent: 0.1, p90Descent: 0.1, maxIntervalHours: 6, minLevel: -5, maxLevel: 10,
+    sufficient: true, p90Ascent: 0.1, p90Descent: 0.1, p95Ascent: 0.2, p95Descent: 0.2, maxIntervalHours: 6, minLevel: -5, maxLevel: 10,
   };
   const rows = payload([
     ['2026-01-01T00:00:00', 1],

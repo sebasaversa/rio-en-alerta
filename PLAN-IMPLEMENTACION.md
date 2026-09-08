@@ -95,7 +95,7 @@ Estado de referencia: 14 de agosto de 2026.
   el emulador oficial.
 - `[x]` Comparacion observada de Tigre, Dique Lujan y San Isidro, sin usar esas
   estaciones para el pronostico.
-- `[x]` Indicador estadistico de velocidad por percentil 90 para San Fernando.
+- `[x]` Indicador estadistico de velocidad por percentil 95 y rearme por p90 para San Fernando.
 - `[x]` Tarjeta de tendencia con velocidad actual y velocidades estadisticas de
   alerta para subida y bajada rapida, expresadas en m/h y cm/h.
 - `[x]` Resumen diario opcional por Telegram a las 08:00 ART.
@@ -275,15 +275,16 @@ velocidad_m_h = variacion_m / horas
 Se excluyen fechas o alturas invalidas, tiempos no positivos, intervalos
 mayores a seis horas, alturas fisicamente invalidas y la misma observacion
 recibida en revisiones sucesivas. Los ascensos y descensos se procesan por
-separado: `p90Ascenso` usa velocidades positivas y `p90Descenso` el valor
-absoluto de las negativas. El percentil se interpola linealmente en la posicion
-`(n - 1) * 0,90`. Por definicion, el percentil 90 delimita el 10 % de las
-variaciones historicas mas rapidas de cada direccion.
+separado: los percentiles de ascenso usan velocidades positivas y los de
+descenso el valor absoluto de las negativas. Se calculan p95 para activar
+y p90 para rearmar, interpolados en `(n - 1) * 0,95` y `(n - 1) * 0,90`.
+El p95 selecciona aproximadamente el 5 % de las variaciones historicas mas
+rapidas de cada direccion; los empates pueden modificar esa proporcion.
 
 La clasificacion actual usa las dos ultimas mediciones distintas:
 
-- velocidad mayor o igual a `p90Ascenso`: **Subida rapida**;
-- velocidad negativa cuyo valor absoluto sea mayor o igual a `p90Descenso`:
+- velocidad mayor o igual a `p95Ascenso`: **Subida rapida**;
+- velocidad negativa cuyo valor absoluto sea mayor o igual a `p95Descenso`:
   **Bajada rapida**;
 - otros valores: **Ascenso normal**, **Descenso normal** o **Sin cambios**.
 
@@ -376,7 +377,7 @@ La semantica debe ser estricta:
 
 - `[x]` comparacion observada entre San Fernando, Tigre, Dique Lujan y San
   Isidro, sin incorporarlas al pronostico;
-- `[x]` deteccion estadistica de subidas o bajadas rapidas por percentil 90;
+- `[x]` deteccion estadistica de subidas o bajadas rapidas por percentil 95;
 - `[x]` alertas diferenciadas para crecida, bajante y recuperacion;
 - `[x]` resumen diario opcional por Telegram a las 08:00 ART;
 - `[x]` exportacion CSV del historial;
@@ -530,7 +531,8 @@ INA API
 5. **Idempotencia.** El mismo update o reintento no debe duplicar suscripciones
    ni enviar alertas repetidas.
 6. **Anti-spam.** Procesar cada timestamp INA una vez, notificar solo al entrar
-   en un estado rapido nuevo, rearmarlo despues de una medicion normal y usar
+   en un estado rapido nuevo al alcanzar p95, rearmarlo estrictamente por debajo
+   de p90 de esa direccion (o al invertir la direccion) y usar
    10 cm de histeresis para rearmar la alerta por altura. Registrar cada envio
    y manejar errores 429 de Telegram con backoff.
 7. **Acceso administrativo.** La consulta de usuarios debe requerir una
@@ -541,6 +543,10 @@ INA API
 ### `publicData/velocity`
 
 ```text
+statistics.percentile: 0.95
+statistics.rearmPercentile: 0.9
+statistics.p95Ascent: number|null
+statistics.p95Descent: number|null
 statistics.p90Ascent: number|null
 statistics.p90Descent: number|null
 statistics.validIntervalCount: number
@@ -561,6 +567,24 @@ current.code: string
 calculatedAt: timestamp
 updatedAt: timestamp
 ```
+
+### Ajuste de sensibilidad aprobado el 8 de septiembre de 2026
+
+Los avisos de crecida y bajante se activan al alcanzar p95. El episodio queda
+retenido mientras la velocidad de esa direccion sea mayor o igual a p90,
+aunque la clasificacion instantanea entre p90 y p95 sea normal. Solo se rearma
+al bajar estrictamente de p90 o cambiar de direccion. Una inversion rapida
+puede emitir el aviso de la direccion opuesta en la misma medicion. Los datos
+insuficientes y las mediciones repetidas no rearman el episodio. La altura
+personal y los 10 cm de recuperacion conservan su funcionamiento.
+
+Al publicar esta version deben desplegarse las Functions y la web publica,
+y ejecutar `calculateVelocityStats` para guardar ambos percentiles (tambien
+se recalculan diariamente a las 02:30 ART). Hasta disponer de p95 valido no
+se generan avisos de velocidad ni se usa p90 como respaldo; las alertas por
+altura siguen funcionando. La web y el resumen diario reclasifican la
+velocidad cacheada con los nuevos umbrales para no mostrar etiquetas viejas.
+El cambio esta implementado localmente; esta nota no acredita un despliegue.
 
 ### Decisiones aprobadas el 13 de agosto de 2026
 
@@ -638,7 +662,7 @@ Alcanzo tu altura seleccionada de 3,00 m.
 ```
 
 La misma notificacion puede agrupar varios eventos de una medicion. Crecida y
-bajante incluyen velocidad actual y p90 direccional. Recuperacion se envia solo
+bajante incluyen velocidad actual y p95 direccional. Recuperacion se envia solo
 si el estado anterior estaba por encima de la altura personal y la nueva
 medicion es menor o igual a `threshold - 0,10 m`.
 
@@ -658,7 +682,9 @@ medicion es menor o igual a `threshold - 0,10 m`.
 - idempotencia por timestamp INA y transiciones de estado sin repeticiones;
 - error de INA no genera alerta falsa;
 - velocidad con intervalos irregulares y conversion entre m/h y cm/h;
-- percentil 90 con interpolacion lineal y ascensos/descensos separados;
+- percentiles 95 y 90 con interpolacion lineal y ascensos/descensos separados;
+- oscilaciones entre p90 y p95 sin repeticion, igualdad con ambos limites,
+  rearme bajo p90, inversion de direccion y cache antiguo sin p95;
 - deduplicacion, orden temporal, intervalos invalidos o excesivos;
 - historial insuficiente, igualdad exacta al percentil y ausencia de una nueva
   medicion;
@@ -749,7 +775,7 @@ y el bot debe responder `/ayuda`, `/estado` y `/maximo` desde un chat real.
   observados.
 - `[x]` Resumen diario opcional definido a las 08:00 ART.
 - `[x]` Niveles oficiales de San Fernando: alerta 3,00 m y evacuacion 3,50 m.
-- `[x]` Velocidad rapida definida con p90 direccional sobre hasta 365 dias.
+- `[x]` Velocidad rapida definida con p95 direccional sobre hasta 365 dias y rearme bajo p90.
 - `[x]` El pronostico no dispara alertas; solo lo hace la medicion observada.
 - `[x]` Botones y `setMyCommands` desplegados y verificados con `/start`.
 
